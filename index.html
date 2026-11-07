@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<title>隕石の日でも出社する | 無料ブラウザゲーム</title>
+<meta name="description" content="今朝、街に隕石が降ってくる。部長からの電話は「遅刻すんなよ」。地面の赤い輪をギリギリでよけながら、ワイヤーで街を飛んで9時までに会社へ。スマホのブラウザで無料で遊べる隕石よけの3Dアクション。">
+<meta property="og:type" content="website">
+<meta property="og:title" content="隕石の日でも出社する">
+<meta property="og:description" content="隕石が降る朝、部長は「遅刻すんなよ」。赤い輪をギリギリでよけて、ワイヤーで9時までに会社へ。スマホで無料。">
+<meta property="og:image" content="https://tom3games.github.io/meteor-commute/og.png?v=1">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:url" content="https://tom3games.github.io/meteor-commute/">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="theme-color" content="#1b2233">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=M+PLUS+1p:wght@800;900&family=Klee+One:wght@600&family=BIZ+UDPGothic:wght@400;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css?v=1">
+<!-- 本体は1つにまとめたファイル（tools/build.mjs で作る）。最初から取りに行く -->
+<link rel="modulepreload" href="dist/game.js?v=1">
+</head>
+<body>
+<div id="view"></div>
+
+<!-- タイトル: 朝のニュースの速報の帯 -->
+<section id="title" class="screen">
+  <div class="news">
+    <div class="news-tag"><span data-t="breaking"></span></div>
+    <div class="news-bar"><span id="newsText" class="news-text"></span></div>
+  </div>
+  <div class="title-text">
+    <h1 class="logo"><span data-t="logo1"></span><span class="logo-big" data-t="logo2"></span></h1>
+    <div class="call"><span class="call-who"><svg viewBox="0 0 16 16" aria-hidden="true"><rect x="4" y="1" width="8" height="14" rx="1.6" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M7 12.5h2" stroke="currentColor" stroke-width="1.6"/></svg><b data-t="bossName"></b><i data-t="calling"></i></span><span class="call-line" data-t="bossLine"></span></div>
+  </div>
+  <div class="title-actions">
+    <button id="btnStart" class="go" data-t="start"></button>
+    <button id="btnHow" class="chip" data-t="how"></button>
+  </div>
+  <nav class="foot">
+    <button id="btnLang" class="chip" data-t="lang"></button>
+    <button id="btnMute" class="chip"></button>
+    <a class="chip" href="https://tom3games.github.io/" data-t="more"></a>
+  </nav>
+</section>
+
+<!-- 遊び方: 社内の掲示 -->
+<section id="how" class="screen hidden">
+  <div class="memo">
+    <p class="memo-head"><span data-t="memoFrom"></span><span data-t="memoDate"></span></p>
+    <h2 data-t="howTitle"></h2>
+    <ol id="howList"></ol>
+    <p class="keys" id="howKeys"></p>
+    <button class="go small" data-close data-t="ok"></button>
+    <p class="credit" data-t="credit"></p>
+    <p class="credit"><a href="privacy.html" target="_blank" rel="noopener" style="display:inline-block;padding:12px 16px;margin:-8px 0 -12px">プライバシー / Privacy</a></p>
+  </div>
+</section>
+
+<!-- 遊び中 -->
+<canvas id="speedfx"></canvas><div id="hitflash"></div><div id="redflash"></div>
+<section id="hud" class="hidden">
+  <div id="watch" class="watch">
+    <svg class="watch-face" viewBox="0 0 64 64" aria-hidden="true">
+      <circle cx="32" cy="32" r="29" fill="#f5f2ea" stroke="#1b2233" stroke-width="4"/>
+      <g stroke="#1b2233" stroke-width="2.4" stroke-linecap="round"><path d="M32 7v5M32 52v5M7 32h5M52 32h5"/></g>
+      <path id="wDeadline" d="M32 32 L32 6 Z" fill="rgba(216,52,31,.25)"/>
+      <path id="wHour" d="M32 32 L32 18" stroke="#1b2233" stroke-width="4" stroke-linecap="round"/>
+      <path id="wMin" d="M32 32 L32 10" stroke="#1b2233" stroke-width="2.6" stroke-linecap="round"/>
+      <circle cx="32" cy="32" r="2.6" fill="#d8341f"/>
+    </svg>
+    <div class="watch-txt"><b id="wTime"></b><span id="wLeft"></span></div>
+  </div>
+  <div id="goalBox" class="goal-box"><span id="gName"></span><b id="gDist"></b></div>
+  <div id="say" class="say hidden"></div>
+  <div id="near" class="near hidden"><b id="nearTxt"></b><span id="nearN"></span></div>
+  <div id="arrow" class="edge-arrow hidden"><svg viewBox="0 0 24 24"><path d="M12 2 L21 20 L12 15 L3 20Z"/></svg></div>
+  <div id="dangers"></div>
+  <div id="miss" class="miss hidden"><span>×</span><small id="missTxt" data-t="tooFar"></small></div>
+  <button id="btnPause" class="corner-btn" data-t="pause"></button>
+  <div id="touch" class="touch hidden">
+    <div id="stickZone" class="stickzone"><div id="stick" class="stick"><div class="knob"></div></div></div>
+    <button class="tbtn tbig" data-k="wire" aria-label="wire"><svg viewBox="0 0 48 48"><path d="M10 40 36 10" stroke="currentColor" stroke-width="3.5" stroke-linecap="square"/><path d="M26 9h11v11" fill="none" stroke="currentColor" stroke-width="3.5"/></svg></button>
+    <button class="tbtn" data-k="jump"><span data-t="jump"></span></button>
+  </div>
+</section>
+
+<!-- 一時停止 -->
+<section id="pause" class="screen hidden">
+  <div class="memo narrow">
+    <h2 data-t="paused"></h2>
+    <button id="btnResume" class="go small" data-t="resume"></button>
+    <button id="btnQuit" class="memo-link" data-t="quit"></button>
+  </div>
+</section>
+
+<!-- 結果: 遅刻届・出勤記録 -->
+<section id="result" class="screen hidden">
+  <div class="slip-wrap"><canvas id="slip"></canvas></div>
+  <div class="result-actions">
+    <button id="btnAgain" class="go small" data-t="again"></button>
+    <div class="chips">
+      <button id="btnSave" class="chip" data-t="save"></button>
+      <a id="btnPost" class="chip" target="_blank" rel="noopener" data-t="post"></a>
+      <button id="btnTitle" class="chip" data-t="toTitle"></button>
+    </div>
+  </div>
+</section>
+
+<!-- ロード画面: 朝の街の上を隕石が流れていく -->
+<div id="boot" class="boot">
+  <div class="boot-art" aria-hidden="true">
+    <svg class="boot-sky" viewBox="0 0 240 140">
+      <defs><linearGradient id="bt" x1="1" y1="1" x2="0" y2="0"><stop offset="0" stop-color="#ffb347"/><stop offset="1" stop-color="#ff5a1f" stop-opacity="0"/></linearGradient></defs>
+      <g class="boot-met m1"><path d="M0 0 L-46 -30" stroke="url(#bt)" stroke-width="5" stroke-linecap="round"/><circle r="5.5" fill="#ffd27a"/></g>
+      <g class="boot-met m2"><path d="M0 0 L-34 -22" stroke="url(#bt)" stroke-width="4" stroke-linecap="round"/><circle r="4" fill="#ffd27a"/></g>
+      <g class="boot-met m3"><path d="M0 0 L-28 -18" stroke="url(#bt)" stroke-width="3" stroke-linecap="round"/><circle r="3.2" fill="#ffd27a"/></g>
+      <path d="M0 140 V96 H18 V80 H34 V100 H46 V62 H66 V92 H78 V74 H98 V104 H110 V54 H134 V88 H146 V70 H164 V98 H176 V82 H196 V60 H214 V94 H228 V84 H240 V140Z" fill="#0d1220"/>
+      <g fill="#ffcf7a" opacity=".8"><rect x="114" y="62" width="4" height="4"/><rect x="124" y="62" width="4" height="4"/><rect x="114" y="74" width="4" height="4"/><rect x="52" y="70" width="4" height="4"/><rect x="200" y="68" width="4" height="4"/><rect x="200" y="80" width="4" height="4"/></g>
+      <g class="boot-man"><circle cx="0" cy="-15" r="3.2" fill="#0d1220"/><path d="M-1 -12 L2 -4 L-3 3 M2 -4 L6 3 M0 -10 L-5 -6 M0 -10 L5 -8" stroke="#0d1220" stroke-width="2.2" fill="none" stroke-linecap="round"/><rect x="5" y="-9" width="6" height="4.5" rx=".8" fill="#0d1220"/></g>
+    </svg>
+  </div>
+  <p class="boot-msg" data-t="loading">隕石の予報を確認中</p>
+  <div class="boot-bar"><i id="bootBar"></i></div><span id="bootPct" class="boot-pct">0%</span>
+</div>
+<script>
+// ロード画面の進み具合（three の読み込み数を game.js が __bootSet で渡す。それまでは少しずつ進める）
+(function(){
+  var bar=document.getElementById('bootBar'),pct=document.getElementById('bootPct'),k=0,real=false;
+  function draw(){bar.style.transform='scaleX('+k.toFixed(3)+')';pct.textContent=Math.round(k*100)+'%'}
+  window.__bootSet=function(v){real=true;if(v>k){k=Math.min(1,v);draw()}};
+  var t=setInterval(function(){if(real||window.__bootDone){clearInterval(t);return}k=Math.min(0.18,k+0.006);draw()},250);
+  draw();
+})();
+</script>
+<script>
+// 拡大を止める（ピンチ・ダブルタップ・Ctrl+ホイール）。iOS は user-scalable=no を無視するので JS でも止める
+(function(){
+  var opt={passive:false};
+  ['gesturestart','gesturechange','gestureend'].forEach(function(n){document.addEventListener(n,function(e){e.preventDefault()},opt)});
+  document.addEventListener('touchmove',function(e){if(e.touches&&e.touches.length>1)e.preventDefault()},opt);
+  var last=0;document.addEventListener('touchend',function(e){var n=Date.now();if(n-last<300&&!(e.target.closest&&e.target.closest('button,a')))e.preventDefault();last=n},opt);
+  document.addEventListener('dblclick',function(e){e.preventDefault()},opt);
+  window.addEventListener('wheel',function(e){if(e.ctrlKey)e.preventDefault()},opt);
+  window.addEventListener('keydown',function(e){if((e.ctrlKey||e.metaKey)&&['+','-','=','0',';'].indexOf(e.key)>=0)e.preventDefault()});
+})();
+// 起動失敗の保険: JS が動いていない（__jsUp が立たない）・エラーが出て準備できていない時に 9 秒で原因を出す。読み込み中は失敗と出さない
+(function(){
+  var errs=[];
+  window.addEventListener('error',function(e){var tg=e.target;if(tg&&tg!==window&&(tg.src||tg.href))errs.push('load failed: '+(tg.src||tg.href));else errs.push((e.message||'error')+' @'+(e.filename||'')+':'+(e.lineno||''))},true);
+  window.addEventListener('unhandledrejection',function(e){errs.push('reject: '+(e.reason&&e.reason.message||e.reason))});
+  function show(){
+    if(window.__meteorReady||document.getElementById('boot-err')) return;
+    var d=document.createElement('div');d.id='boot-err';
+    d.textContent='起動できませんでした / failed to start\n'+(errs.join('\n')||'(no error captured)')+'\n'+navigator.userAgent;
+    document.body.appendChild(d);
+  }
+  setTimeout(function(){if(!window.__jsUp||errs.length)show()},9000);
+  setTimeout(show,60000);
+})();
+</script>
+<script src="tm.js?v=2" data-game="meteor-commute"></script>
+<script src="sfx.js?v=16"></script>
+<script type="module" src="dist/game.js?v=1"></script>
+<script src="support.js?v=1" data-ja="缶コーヒー" data-en="a can of coffee"></script>
+</body>
+</html>
