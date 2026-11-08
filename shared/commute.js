@@ -1,16 +1,21 @@
 // 隕石の日でも出社する: 出勤の中身（時計・駅・会社・珍しい出来事・遅刻届の中身）。three.js に依存しない
-// 家（空中出前の店の場所の町）→ 駅（電車は止まっている）→ 会社。9:00 までに会社の入口の輪に入る
+// v2: 住宅街の家 → 商店街 → 駅前広場の高架の駅（電車は止まっている）→ 川 → オフィス街の突き当たりの会社のタワー。地図は shared/commutemap.js
 import { mulberry } from './util.js?v=1'
-import { createSky, stepSky, dropAt, noteRunner, SKY } from './meteor.js?v=1'
+import { createSky, stepSky, dropAt, noteRunner, SKY } from './meteor.js?v=2'
+import { MAP } from './commutemap.js?v=2'
+import { createWorld } from './track.js?v=16'
+import { addTown } from './town.js?v=16'
+import { buildPoles } from './street.js?v=16'
 
 export const COM = {
-  home: { x: 21, z: 842, yaw: Math.PI / 2 },          // 家の前（空中出前の店の場所。町の家に囲まれている）
-  station: { x: 390, z: 905, r: 7, name: ['明星台駅', 'Myojodai Sta.'] },   // 東の大通りの駅前（電車は隕石で止まっている）
-  office: { x: 264, z: 108, r: 6.5, name: ['株式会社ドンマイ商事', 'Donmai Trading Co.'] },  // 運河の南。会社の入口（西の通り側）
-  officeBld: { x: 294, z: 108 },                       // 会社のビル（入口の東）
+  home: { ...MAP.home },                                // 家（メゾン朝日）の前の道。北を向いて出る
+  shop: MAP.shop,                                       // town.js の店の箱 = マンションの玄関
+  station: { ...MAP.station, r: 7, name: ['明星台駅', 'Myojodai Sta.'] },   // 高架の駅の改札（駅前広場の東）
+  office: { ...MAP.office, r: 6.5, name: ['株式会社ドンマイ商事', 'Donmai Trading Co.'] },  // 本町大通りの突き当たりのタワーの入口
+  officeBld: MAP.officeBld, bossSpot: MAP.bossSpot,
   startMin: 8 * 60 + 47,  // 家を出る時刻
-  rate: 5.3,              // 1秒で時計が 5.3秒進む（9:00 は 147秒後）
-  endMin: 9 * 60 + 10,    // これを過ぎたら欠勤扱いで終わる（260秒）
+  rate: 5.6,              // 1秒で時計が 5.6秒進む（9:00 は 139秒後）。v1 は 5.3
+  endMin: 9 * 60 + 12,    // これを過ぎたら欠勤扱いで終わる（268秒）。v1 は 9:10
   officeHitOdds: 0.04,    // 珍しい: 会社に隕石が落ちて臨時休業
   bossRideOdds: 0.06,     // 珍しい: 部長が隕石に乗って出社してくる
   riderAt: [26, 40]       // 後輩が転がる隕石に乗って通り過ぎる時間
@@ -20,6 +25,9 @@ export const DEADLINE = 9 * 60 * 60   // 9:00:00（秒）
 export const clockSec = run => COM.startMin * 60 + run.t * COM.rate
 export function fmtClock(s) { s = Math.floor(s); const h = Math.floor(s / 3600), m = Math.floor(s / 60) % 60; return `${h}:${String(m).padStart(2, '0')}` }
 export const goalOf = run => run.leg === 0 ? COM.station : COM.office
+// 通勤の街を作る（画面・bot・検証で同じ）
+export function commuteWorld() { const w = createWorld('commute'); addTown(w, COM.shop); buildPoles(w, COM.shop); return w }
+const legPath = (world, leg) => world.nav && world.nav.legs ? world.nav.legs[leg] : null
 
 export function createRun(world, seed = 1, opt = {}) {
   const rnd = mulberry(seed * 2654435761 + 11)
@@ -31,7 +39,7 @@ export function createRun(world, seed = 1, opt = {}) {
     called9: false
   }
   run.sky = createSky(world, seed, { rare })
-  run.sky.goal = goalOf(run)
+  run.sky.goal = goalOf(run); run.sky.path = legPath(world, 0)
   return run
 }
 
@@ -45,7 +53,7 @@ export function stepRun(run, r, dt, opt = {}) {
   const c = clockSec(run)
   // 駅: 電車は止まっている。会社まで行く
   if (run.leg === 0 && Math.hypot(r.x - COM.station.x, r.z - COM.station.z) < COM.station.r + 2 && r.y < 6) {
-    run.leg = 1; run.stationAt = c; sky.goal = goalOf(run)
+    run.leg = 1; run.stationAt = c; sky.goal = goalOf(run); sky.path = legPath(sky.world, 1); sky.leg = 1
     ev.push({ t: 'station', clock: c })
   }
   // 8:58 の電話
@@ -75,7 +83,7 @@ export function stepRun(run, r, dt, opt = {}) {
   if (run.leg === 1 && !run.arrived && !run.officeHit && dO < COM.office.r + 1.5 && r.y < 5) {
     run.arrived = c
     ev.push({ t: 'arrive', clock: c, late: c > DEADLINE })
-    if (run.rare === 'bossRide') { run.bossAt = run.t; dropAt(sky, COM.office.x - 14, COM.office.z + 10, true, { kind: 'boss', warn: 2.4 }); run.endIn = 5.2 }
+    if (run.rare === 'bossRide') { run.bossAt = run.t; dropAt(sky, COM.bossSpot.x, COM.bossSpot.z, true, { kind: 'boss', warn: 2.4 }); run.endIn = 5.2 }
     else run.endIn = 2.6
   }
   if (run.endIn != null) { run.endIn -= dt; if (run.endIn <= 0) { run.over = true; ev.push({ t: 'end' }) } }

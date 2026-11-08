@@ -37,6 +37,32 @@ if (script === 'near') {
   await p.evaluate(() => { const M = meteor; M.dbg.pause(true); let n = 0; while (!M.run.over && n < 60 * 300) { M.dbg.step(20); n += 20 } M.dbg.pause(false) })
   await p.waitForTimeout(1200); await p.screenshot({ path: ROOT + `shots/${name}_result.png` })
 }
+if (script === 'tour') {
+  // 新しい街の見どころを順に撮る（時間を止めて、自分をそこへ移す）。[x, y, z, 向き(度), 見下ろし, 名前]
+  const spots = [[0, 0, 14, 0, 0.25, 'home'], [0, 0, 250, 0, 0.2, 'resi'], [0, 0, 330, 0, 0.15, 'arcade'], [0, 0, 540, 30, 0.2, 'plaza'], [100, 0, 630, 90, 0.15, 'station'],
+    [0, 0, 735, 0, 0.12, 'bridge'], [150, 10, 720, 0, 0.15, 'tracks'], [0, 0, 880, 0, 0.1, 'blvd'], [0, 0, 1080, 0, 0.05, 'tower'], [-30, 0, 960, -60, 0.05, 'crane'], [40, 0, 600, -90, 0.2, 'screen']]
+  await p.evaluate(() => { meteor.start(7); meteor.dbg.quiet(999) })
+  for (const [x, y, z, deg, pitch, nm] of spots) {
+    await p.evaluate(([x, y, z, deg, pitch]) => { const M = meteor; M.dbg.pause(true); M.dbg.teleport(x, y, z, deg * Math.PI / 180); M.cam.hd = deg * Math.PI / 180; M.cam.pitch = pitch; M.cam.userT = performance.now(); M.dbg.step(30); M.dbg.render(40) }, [x, y, z, deg, pitch])
+    await p.waitForTimeout(500)
+    await p.screenshot({ path: ROOT + `shots/${name}_${nm}.png` })
+  }
+  await p.evaluate(() => meteor.dbg.pause(false))
+}
+if (script === 'car') {
+  // 車の大きさを人と道と比べる: 止めた車の横に自分を立たせて、横と斜め後ろから撮る
+  await p.evaluate(() => { meteor.start(7); meteor.dbg.quiet(999); meteor.dbg.pause(true); meteor.dbg.step(5) })
+  for (const [k, side, deg, pitch, back] of [['side', 3.2, -90, 0.12, 0], ['back', 1.6, 0, 0.12, -6.5]]) {
+    await p.evaluate(([side, deg, pitch, back]) => {
+      const M = meteor, me = M.me, cars = M.street.traffic.cars.filter(c => !c.hidden && Math.abs(c.z - 880) < 400)
+      const c = cars.sort((a, b) => Math.hypot(a.x - me.x, a.z - me.z) - Math.hypot(b.x - me.x, b.z - me.z))[0]
+      const rx = Math.cos(c.yaw), rz = -Math.sin(c.yaw)
+      const fx = Math.sin(c.yaw), fz = Math.cos(c.yaw)
+      M.dbg.teleport(c.x + rx * side + fx * back, 0, c.z + rz * side + fz * back, c.yaw); M.cam.hd = c.yaw + deg * Math.PI / 180; M.cam.pitch = pitch; M.cam.userT = performance.now(); M.dbg.render(40)
+    }, [side, deg, pitch, back])
+    await p.waitForTimeout(400); await p.screenshot({ path: ROOT + `shots/${name}_car_${k}.png` })
+  }
+}
 if (script === 'play') {
   await p.evaluate(() => { meteor.start(5); meteor.dbg.autoBot('skilled', 5) })
   for (let i = 0; i < 6; i++) { await p.waitForTimeout(4000); await p.screenshot({ path: ROOT + `shots/${name}_seq${i}.png` }) }

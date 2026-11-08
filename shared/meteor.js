@@ -4,25 +4,31 @@
 import { mulberry } from './util.js?v=1'
 
 export const SKY = {
-  warn: 2.5,              // 予告から落ちるまで（秒）。走って 25m、スイングなら 50m 以上動ける
-  warnBig: 3.1,
+  // v2（2026-11-09 本人「あんまり難しくないかも。もっと隕石をユーザの周りに集めて欲しい」）: 予告を短く（1.5秒以上は残す）、自分の周りに集める
+  warn: 2.1,              // 予告から落ちるまで（秒）。v1 は 2.5。走って 21m、スイングなら 40m 動ける
+  warnBig: 2.6,
   r: 8,                   // 吹き飛ばす半径（m）。輪の大きさ
   rBig: 13,
   nearBand: 7,            // 輪の外 7m 以内でよけたらギリギリ回避
-  gapStart: 2.3, gapEnd: 1.25,   // 次の隕石までの間（始め → 終わり。だんだん激しく）
+  graceAfterHit: 2.4,     // 飛ばされてからこの秒数は新しい隕石を落とさない
+  column: 22,             // 輪の上のこの高さまでは落ちてくる隕石に当たる（v2）
+  gapStart: 1.6, gapEnd: 0.9,    // 次の隕石までの間（始め → 終わり。だんだん激しく）。v1 は 2.3 → 1.25
   lead: 0.85,             // 自分の何秒先の位置を狙うか（予告時間のこの割合）。まっすぐ走り続けると当たる
-  aimOdds: 0.5,           // 自分の先を狙う割合（残りは行く道の先・近くのどこか）
-  routeOdds: 0.3,
+  aimJit: 6,              // 自分の先を狙う時のずれ（m の幅）。v1 は 8
+  aimOdds: 0.55,          // 自分の先を狙う割合（残りは行く道の先・すぐ近く）
+  routeOdds: 0.3,         // 行く道の先 22〜48m（道のりに沿って測る。曲がり角の先にも落ちる）
   bigOdds: 0.12,
-  showerEvery: [34, 48],  // 流星群（3〜4個が一列に）の間隔
-  blastH: 15, blastUp: 13, blastStun: 0.9, faceplant: 1.6,   // 当たった時: 横へ 15m/s・上へ 13m/s・操作できない 0.9秒・着地して倒れる 1.6秒
+  showerEvery: [22, 32],  // 流星群（4〜5個が進む向きを横切る一列に）の間隔。v1 は 34〜48秒
+  clusterEvery: [9, 13], clusterEnd: [5, 8],   // 3つまとめて自分の先を囲む（始め → 終わり）
+  cutEvery: [16, 22],     // 大きいのを行く道の先 34〜46m に落として、いちばん素直な道をふさぐ
+  blastH: 15, blastUp: 13, blastStun: 1.0, faceplant: 2.2,   // 当たった時: 横へ 15m/s・上へ 13m/s・操作できない 0.9秒・着地して倒れる 1.6秒
   nearBoost: 6.5,         // ギリギリ回避で進む向きに足す速さ（m/s）
   chainSec: 5,            // この秒数の中で続けてよけるとつながる
   craterHot: 11,          // 落ちた所はしばらく燃えている（地面を走ると熱くて跳ねる）
   burnSec: 28,            // ビルの屋上に落ちると燃えて、その間はワイヤーが掛からない
   rollOdds: 0.3,          // 地面に落ちた隕石が転がり出す割合
   rollSpeed: 13, rollR: 1.9, rollSec: 6, rollKnock: 11,
-  maxCraters: 28, maxFall: 7
+  maxCraters: 28, maxFall: 11
 }
 
 const clamp = (v, a, b) => v < a ? a : v > b ? b : v
@@ -42,7 +48,8 @@ function impactAt(world, x, z) {
 export function createSky(world, seed = 1, opt = {}) {
   const rnd = mulberry(seed * 104729 + 7)
   return {
-    world, rnd, t: 0, next: 3.2, showerAt: SKY.showerEvery[0] + rnd() * (SKY.showerEvery[1] - SKY.showerEvery[0]),
+    world, rnd, t: 0, next: 2.6, showerAt: SKY.showerEvery[0] + rnd() * (SKY.showerEvery[1] - SKY.showerEvery[0]),
+    clusterAt: 7 + rnd() * 4, cutAt: 12 + rnd() * 6, path: null,
     falling: [], craters: [], rollers: [], fires: [], events: [], id: 1, goal: null, intensity: 0,
     stats: { hits: 0, rollHits: 0, near: 0, bestChain: 0, chain: 0, lastNear: -99, burnedWire: 0, hotFeet: 0, impacts: 0, bigNear: 0 },
     knocked: false, rare: opt.rare || null, officeHit: false, quiet: 0
@@ -60,24 +67,62 @@ export function dropAt(sky, x, z, big = false, extra = {}) {
   return m
 }
 
-function pickTarget(sky, r) {
-  const k = sky.rnd(), w = sky.world
-  let x, z
-  if (k < SKY.aimOdds) {
-    // 自分の少し先（今の速さのまま進んだ所）。少しずらす
-    const L = SKY.warn * SKY.lead
-    x = r.x + r.vx * L + (sky.rnd() - 0.5) * 8; z = r.z + r.vz * L + (sky.rnd() - 0.5) * 8
-  } else if (k < SKY.aimOdds + SKY.routeOdds && sky.goal) {
-    // 行く道の先（会社や駅の方へ 35〜80m）。クレーターや燃えるビルで道が変わる
-    const gx = sky.goal.x - r.x, gz = sky.goal.z - r.z, gl = Math.hypot(gx, gz) || 1, d = Math.min(gl, 35 + sky.rnd() * 45)
-    x = r.x + gx / gl * d + (sky.rnd() - 0.5) * 30; z = r.z + gz / gl * d + (sky.rnd() - 0.5) * 30
-  } else {
-    const a = sky.rnd() * Math.PI * 2, d = 12 + sky.rnd() * 55
-    x = r.x + Math.sin(a) * d; z = r.z + Math.cos(a) * d
+// 道のり（sky.path = [[x,z],...]）の上で、自分のいる所から d m 先の点。道のりが無ければ行き先へまっすぐ
+export function aheadOnPath(sky, r, d) {
+  const P = sky.path
+  if (!P || P.length < 2) {
+    const g = sky.goal || { x: r.x, z: r.z }, gx = g.x - r.x, gz = g.z - r.z, gl = Math.hypot(gx, gz) || 1, k = Math.min(gl, d)
+    return { x: r.x + gx / gl * k, z: r.z + gz / gl * k }
   }
-  const b = w.bounds
-  return { x: clamp(x, b.x0 + 10, b.x1 - 10), z: clamp(z, b.z0 + 10, b.z1 - 10) }
+  // いちばん近い区間に下ろしてから先へ進む
+  let bi = 0, bt = 0, bd = 1e18
+  for (let i = 0; i < P.length - 1; i++) {
+    const [ax, az] = P[i], [bx, bz] = P[i + 1], dx = bx - ax, dz = bz - az, L2 = dx * dx + dz * dz || 1
+    const t = clamp(((r.x - ax) * dx + (r.z - az) * dz) / L2, 0, 1), px = ax + dx * t - r.x, pz = az + dz * t - r.z, dd = px * px + pz * pz
+    if (dd < bd) { bd = dd; bi = i; bt = t }
+  }
+  let left = d, i = bi, t = bt
+  while (i < P.length - 1) {
+    const [ax, az] = P[i], [bx, bz] = P[i + 1], L = Math.hypot(bx - ax, bz - az) || 1, rest = L * (1 - t)
+    if (left <= rest) { const k = t + left / L; return { x: ax + (bx - ax) * k, z: az + (bz - az) * k } }
+    left -= rest; i++; t = 0
+  }
+  const e = P[P.length - 1]
+  return { x: e[0], z: e[1] }
 }
+
+// 道のりのどこまで来たか（0〜1）
+export function pathFrac(P, r) {
+  let tot = 0, at = 0, bd = 1e18
+  for (let i = 0; i < P.length - 1; i++) {
+    const [ax, az] = P[i], [bx, bz] = P[i + 1], dx = bx - ax, dz = bz - az, L = Math.hypot(dx, dz) || 1
+    const t = clamp(((r.x - ax) * dx + (r.z - az) * dz) / (L * L), 0, 1), px = ax + dx * t - r.x, pz = az + dz * t - r.z, dd = px * px + pz * pz
+    if (dd < bd) { bd = dd; at = tot + L * t }
+    tot += L
+  }
+  return tot ? at / tot : 0
+}
+
+// 自分の少し先（今の速さのまま進んだ所。止まっていれば足元）
+function aimPoint(sky, r, jit = SKY.aimJit) {
+  const L = SKY.warn * SKY.lead
+  return { x: r.x + r.vx * L + (sky.rnd() - 0.5) * jit, z: r.z + r.vz * L + (sky.rnd() - 0.5) * jit }
+}
+
+function pickTarget(sky, r) {
+  const k = sky.rnd()
+  let p
+  if (k < SKY.aimOdds) p = aimPoint(sky, r)
+  else if (k < SKY.aimOdds + SKY.routeOdds && sky.goal) {
+    // 行く道の先（道のりに沿って 22〜48m）。少し横へずらす
+    p = aheadOnPath(sky, r, 22 + sky.rnd() * 26); p.x += (sky.rnd() - 0.5) * 14; p.z += (sky.rnd() - 0.5) * 14
+  } else {
+    const a = sky.rnd() * Math.PI * 2, d = 6 + sky.rnd() * 20
+    p = { x: r.x + Math.sin(a) * d, z: r.z + Math.cos(a) * d }
+  }
+  return inBounds(sky.world, p)
+}
+function inBounds(w, p) { const b = w.bounds; return { x: clamp(p.x, b.x0 + 10, b.x1 - 10), z: clamp(p.z, b.z0 + 10, b.z1 - 10) } }
 
 // 建物が燃えているか（燃えている間はワイヤーが掛からない）。runner.js が o.burning を見る
 function burn(sky, o) {
@@ -91,20 +136,40 @@ export function stepSky(sky, r, dt, { active = true, spawn = true } = {}) {
   const ev = sky.events
   // 次の隕石
   if (spawn && active) {
-    sky.intensity = clamp(sky.t / 150, 0, 1)
+    // 激しさ: 道のりをどこまで進んだか（家 0 → 会社 1）で上げる。時間だけで上げると、遅れた人ほど隕石の雨から抜けられなくなる
+    sky.intensity = sky.path ? clamp(0.8 * ((sky.leg || 0) + pathFrac(sky.path, r)) / 2 + 0.2 * sky.t / 150, 0, 1) : clamp(sky.t / 150, 0, 1)
     sky.next -= dt
     if (sky.next <= 0 && sky.falling.length < SKY.maxFall && !(sky.quiet > 0)) {
       const p = pickTarget(sky, r)
       dropAt(sky, p.x, p.z, sky.rnd() < SKY.bigOdds)
       sky.next = SKY.gapStart + (SKY.gapEnd - SKY.gapStart) * sky.intensity + (sky.rnd() - 0.5) * 0.6
     }
+    // 3つまとめて自分の先を囲む（三角に並べ、少しずつ時間をずらす。真ん中の隙間か外へ抜ける）
+    sky.clusterAt -= dt
+    if (sky.clusterAt <= 0 && !(sky.quiet > 0)) {
+      const c = aimPoint(sky, r, 3), a0 = sky.rnd() * Math.PI * 2
+      for (let i = 0; i < 3; i++) {
+        const a = a0 + i * Math.PI * 2 / 3, q = inBounds(sky.world, { x: c.x + Math.sin(a) * 11, z: c.z + Math.cos(a) * 11 })
+        const m = dropAt(sky, q.x, q.z, false, { cluster: true }); m.warn += i * 0.3; m.tLeft = m.warn
+      }
+      ev.push({ t: 'cluster' })
+      const E = SKY.clusterEvery, F = SKY.clusterEnd, k = sky.intensity
+      sky.clusterAt = E[0] + (F[0] - E[0]) * k + sky.rnd() * (E[1] - E[0] + (F[1] - F[0] - E[1] + E[0]) * k)
+    }
+    // 道をふさぐ大きいの: 行く道の先に落として、素直な道を通れなくする（回り道か、上を越える）
+    sky.cutAt -= dt
+    if (sky.cutAt <= 0 && !(sky.quiet > 0) && sky.goal) {
+      const q = inBounds(sky.world, aheadOnPath(sky, r, 34 + sky.rnd() * 12))
+      if (Math.hypot(sky.goal.x - r.x, sky.goal.z - r.z) > 40) { dropAt(sky, q.x, q.z, true, { cut: true }); ev.push({ t: 'cut' }) }
+      sky.cutAt = SKY.cutEvery[0] + sky.rnd() * (SKY.cutEvery[1] - SKY.cutEvery[0])
+    }
     sky.showerAt -= dt
-    if (sky.showerAt <= 0) {
-      // 流星群: 進む向きを横切る一列（3〜4個、少しずつ時間をずらす）
+    if (sky.showerAt <= 0 && !(sky.quiet > 0)) {
+      // 流星群: 進む向きを横切る一列（4〜5個、少しずつ時間をずらす）
       const v = Math.hypot(r.vx, r.vz), hx = v > 2 ? r.vx / v : Math.sin(r.yaw), hz = v > 2 ? r.vz / v : Math.cos(r.yaw)
-      const n = 3 + Math.floor(sky.rnd() * 2), ahead = 22 + v * 1.4
+      const n = 4 + Math.floor(sky.rnd() * 2), ahead = 18 + v * 1.3
       for (let i = 0; i < n; i++) {
-        const s = (i - (n - 1) / 2) * 15
+        const s = (i - (n - 1) / 2) * 13
         const m = dropAt(sky, r.x + hx * ahead - hz * s, r.z + hz * ahead + hx * s, false, { shower: true })
         m.warn += i * 0.25; m.tLeft = m.warn
       }
@@ -193,7 +258,9 @@ function impact(sky, m, r) {
   const ev = sky.events
   sky.stats.impacts++
   // 自分との距離（落ちた点を中心に、横と縦。屋上に落ちたら屋上の高さが中心）
-  const dh = Math.hypot(r.x - m.x, r.z - m.z), dv = Math.abs((r.y + 0.9) - m.y)
+  // v2: 隕石は空から輪の真上を落ちてくるので、輪の上の空（落ちた点から上へ column m）にいても当たる。v1 は高く振っていれば当たらなかった
+  const dh = Math.hypot(r.x - m.x, r.z - m.z), up = r.y + 0.9 - m.y
+  const dv = up < -1.5 ? -1.5 - up : up > SKY.column ? up - SKY.column : 0
   const d = Math.hypot(dh, dv * 0.8)
   const office = sky.office && m.officeMeteor
   ev.push({ t: 'impact', id: m.id, x: m.x, y: m.y, z: m.z, big: m.big, r: m.r, d, bld: m.bld ? true : false, kind: m.kind || '', office: !!office })
@@ -202,6 +269,7 @@ function impact(sky, m, r) {
   if (d < m.r && !(r.wreck > 0)) {
     sky.stats.hits++
     knock(sky, r, m.x, m.z, SKY.blastH, SKY.blastUp, SKY.blastStun)
+    sky.quiet = Math.max(sky.quiet || 0, SKY.graceAfterHit)   // 飛ばされた直後は次を落とさない（起き上がる前に次が来て抜けられなくなるのを防ぐ）
     ev.push({ t: 'blast', x: m.x, z: m.z, big: m.big })
   } else if (d < m.r + SKY.nearBand && !(r.wreck > 0)) {
     if (m.big) sky.stats.bigNear++

@@ -181,7 +181,7 @@ export function trafficPool(scene, low) {
   return {
     draw(cars, cam, dt) {
       const R2 = (low ? 150 : 200) ** 2, near = []
-      for (const c of cars) { const d = (c.x - cam.x) ** 2 + (c.z - cam.z) ** 2; if (d < R2) near.push([c, d]) }
+      for (const c of cars) { if (c.hidden) continue; const d = (c.x - cam.x) ** 2 + (c.z - cam.z) ** 2; if (d < R2) near.push([c, d]) }
       near.sort((a, b) => a[1] - b[1])
       const used = {}
       for (const [c] of near) {

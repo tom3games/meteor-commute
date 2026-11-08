@@ -1,11 +1,9 @@
 // bot の出勤を種を変えて回し、着いた時刻の分布を出す。node tools/sim.mjs [回数] [性格,性格]
-import { createWorld } from '../shared/track.js'
-import { createRunner, stepRunner } from '../shared/runner.js'
-import { COM, createRun, stepRun, verdict, fmtClock, DEADLINE } from '../shared/commute.js'
-import { createBot, botInput } from '../shared/bot.js'
-import { createStreet } from '../shared/street.js'
-import { addTown } from '../shared/town.js'
-const world = createWorld('city'); addTown(world, { x: 30, y: 0, z: 842, r: 7 })
+import { createRunner, stepRunner } from '../shared/runner.js?v=16'
+import { COM, createRun, stepRun, verdict, fmtClock, DEADLINE, commuteWorld } from '../shared/commute.js?v=2'
+import { createBot, botInput } from '../shared/bot.js?v=16'
+import { createStreet } from '../shared/street.js?v=16'
+const world = commuteWorld()
 const dt = 1 / 60
 export function play(kind, seed, opt = {}) {
   const r = createRunner({ id: 'me', spawn: { x: COM.home.x, y: 0, z: COM.home.z, yaw: COM.home.yaw } })
@@ -16,7 +14,7 @@ export function play(kind, seed, opt = {}) {
     const inp = botInput(b, r, run, world, dt)
     r.events.length = 0
     st.update(dt, r); stepRunner(r, inp, dt, world); st.collide(r)
-    stepRun(run, r, dt)
+    stepRun(run, r, dt, { spawn: !process.env.NOSKY })
     if (opt.verbose) for (const e of run.events) console.log(run.t.toFixed(1), JSON.stringify(e))
     run.events.length = 0; run.sky.events.length = 0
     steps++

@@ -5,7 +5,7 @@
 //   blind:   上手く飛ぶが、隕石を全く見ない（よける操作が効いているかを測る）
 //   idle:    何もしない
 import { findAnchor } from './runner.js?v=16'
-import { goalOf } from './commute.js?v=1'
+import { goalOf } from './commute.js?v=2'
 
 const K = 130 / 80
 const XS = [-320, -240, -160, -80, 0, 80, 160, 240, 320].map(x => x * K)
@@ -19,6 +19,7 @@ function clearLine(world, ax, az, bx, bz) {
   const n = Math.ceil(Math.hypot(bx - ax, bz - az) / 4)
   for (let i = 1; i < n; i++) {
     const px = ax + (bx - ax) * i / n, pz = az + (bz - az) * i / n
+    if (world.water && world.groundAt(px, pz, 2).h < -1) return false   // 川の上は通れない（橋の上は板の高さが返る）
     for (const o of world.nearby(px, pz)) {
       if (o.kind !== 'building' || o.y0 > 1 || o.y1 < 2) continue
       if (Math.abs(px - o.cx) < o.hw + 0.5 && Math.abs(pz - o.cz) < o.hl + 0.5) return false
@@ -33,7 +34,21 @@ function gridPath(ax, az, F) {
   return [{ x: ix, z: iz }, onXroad ? { x: gx, z: iz } : { x: ix, z: gz }, onXroad ? { x: gx, z: F.z } : { x: F.x, z: gz }, F]   // 最後は目的地のいちばん近くの道に出てから
 }
 
-function route(r, goal, world) {
+// v2 の街: 地図の道のり（world.nav.legs）に沿う。見通せるいちばん先の曲がり角を目指す（3つ先まで）
+function legRoute(r, P, world) {
+  let bi = 0, bd = 1e18, bp = null
+  for (let i = 0; i < P.length - 1; i++) {
+    const [ax, az] = P[i], [bx, bz] = P[i + 1], dx = bx - ax, dz = bz - az, L2 = dx * dx + dz * dz || 1
+    const t = Math.max(0, Math.min(1, ((r.x - ax) * dx + (r.z - az) * dz) / L2)), px = ax + dx * t, pz = az + dz * t, dd = (px - r.x) ** 2 + (pz - r.z) ** 2
+    if (dd < bd) { bd = dd; bi = i; bp = { x: px, z: pz } }
+  }
+  const rest = P.slice(bi + 1).map(([x, z]) => ({ x, z }))
+  for (let j = Math.min(rest.length - 1, 2); j >= 0; j--) if (clearLine(world, r.x, r.z, rest[j].x, rest[j].z)) return rest.slice(j)
+  return [bp, ...rest]
+}
+
+function route(r, goal, world, leg) {
+  if (world && world.nav && world.nav.legs) return legRoute(r, world.nav.legs[leg], world)
   const F = { x: goal.fx, z: goal.fz }
   let pts
   // 運河をまたぐ時は橋を渡る（橋の無い通りは運河で切れている）
@@ -66,7 +81,7 @@ function danger(sky, r) {
     if (m.tLeft > 1.7) continue
     const px = r.x + r.vx * m.tLeft * 0.8, pz = r.z + r.vz * m.tLeft * 0.8
     const d = Math.min(Math.hypot(px - m.x, pz - m.z), Math.hypot(r.x - m.x, r.z - m.z) + (m.tLeft < 0.5 ? 0 : 99))
-    if (d < m.r + 2.5 && Math.abs(r.y + 0.9 - m.y) < m.r + 4 && (!best || m.tLeft < best.tLeft)) best = m
+    if (d < m.r + 2.5 && r.y + 0.9 - m.y > -3 && r.y + 0.9 - m.y < 26 && (!best || m.tLeft < best.tLeft)) best = m
   }
   return best
 }
@@ -78,7 +93,7 @@ export function botInput(b, r, run, world, dt) {
   const goal = { fx: G.x, fz: G.z, x: G.x, z: G.z, y: 0 }
   b.replan -= dt
   const key = G.x + ',' + G.z
-  if (!b.plan || b.goalKey !== key || b.replan <= 0) { b.plan = route(r, goal, world); b.idx = 0; b.replan = 1.5; b.goalKey = key }
+  if (!b.plan || b.goalKey !== key || b.replan <= 0) { b.plan = route(r, goal, world, run.leg); b.idx = 0; b.replan = world.nav && world.nav.legs ? 0.6 : 1.5; b.goalKey = key }
   while (b.idx < b.plan.length - 1 && Math.hypot(b.plan[b.idx].x - r.x, b.plan[b.idx].z - r.z) < 9) b.idx++
   const final = b.idx >= b.plan.length - 1
   let p = final ? { x: G.x, z: G.z } : b.plan[b.idx]
@@ -94,6 +109,22 @@ export function botInput(b, r, run, world, dt) {
     const sx = -az / al, sz = ax / al, side = Math.sin(want) * sx + Math.cos(want) * sz >= 0 ? 1 : -1
     const ox = ax / al * 0.6 + sx * side, oz = az / al * 0.6 + sz * side
     want = Math.atan2(ox, oz); dodge = true; b.dodgeId !== m.id && (b.dodges++, b.dodgeId = m.id)
+    // 上手い人は、近く落ちる輪を全部見て、どの輪にも入らない向きを選ぶ（3つで囲まれた時・流星群）
+    if (b.kind === 'skilled' || b.kind === 'runner') {
+      const base = Math.atan2(G.x - r.x, G.z - r.z), v = Math.max(9, Math.hypot(r.vx, r.vz))
+      let bestA = want, bestS = -1e9
+      for (let k = 0; k < 16; k++) {
+        const a = k * Math.PI / 8, dx = Math.sin(a), dz = Math.cos(a)
+        let sc = -Math.abs(ang(a - base)) * 0.8
+        for (const q of run.sky.falling) {
+          if (q.kind === 'boss' || q.kind === 'office' || q.kind === 'rider' || q.tLeft > 2.2) continue
+          const t = q.tLeft, px = r.x + dx * v * t * 0.8, pz = r.z + dz * v * t * 0.8, d = Math.hypot(px - q.x, pz - q.z)
+          if (d < q.r + 1.5) sc -= 10 + (q.r + 1.5 - d)
+        }
+        if (sc > bestS) { bestS = sc; bestA = a }
+      }
+      want = bestA
+    }
   }
   const diff = ang(want - r.yaw)
   inp.steer = Math.max(-1, Math.min(1, -diff * 2.5))
@@ -117,6 +148,16 @@ export function botInput(b, r, run, world, dt) {
     if (a && !(b.kind === 'clumsy' && b.rnd() < 0.33)) { wire = true; b.wT = 0; b.aim = a } else if (a) b.wT = 0
   }
   if (r.rope && dGoal < 30 && r.y < 6) wire = true   // 着く前に振り子の下で外す
+  // 空中で輪に向かっている時（上手い人だけ）: ワイヤーを外し、よける向きの掛け点へ掛け直す
+  if (dodge && b.kind === 'skilled' && !r.grounded && m.tLeft < 1.3) {
+    if (r.rope && !b.relDodge) { wire = true; b.relDodge = m.id }
+    else if (!r.rope && b.wT > 0.15) {
+      const v = Math.max(10, Math.hypot(r.vx, r.vz))
+      const a = findAnchor(world, { ...r, yaw: want, vx: Math.sin(want) * v, vz: Math.cos(want) * v }, want)
+      if (a) { wire = true; b.wT = 0; b.aim = a }
+    }
+  }
+  if (!dodge) b.relDodge = null
   if (b.relNow && r.rope) { wire = true }
   b.relNow = false
   inp.wire = wire && !b.prevW; b.prevW = wire

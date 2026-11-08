@@ -478,10 +478,11 @@ export function stepRunner(r, inp, dt, world) {
 
   physics(r, thr, dt, world, false)
 
-  // 復帰用に、地面にいた位置を覚える
-  if (r.grounded && r.y > RUN.waterY + 0.5) {
-    r.safeT += dt
-    if (r.safeT > 0.3) { r.safeT = 0; r.safeHist.push({ x: r.x, y: r.y, z: r.z, yaw: r.yaw }); if (r.safeHist.length > 14) r.safeHist.shift() }
+  // 復帰用に、足の下が陸（か屋上）だった位置を覚える。v2 は川を渡るので、振っている間も覚える（地面の時だけだと 200m 戻されていた）
+  r.safeT += dt
+  if (r.safeT > 0.3 && !r.falling) {
+    const f = floorAt(world, r.x, r.z, r.y)
+    if (f.h > RUN.waterY + 0.5) { r.safeT = 0; r.safeHist.push({ x: r.x, y: f.h, z: r.z, yaw: r.yaw }); if (r.safeHist.length > 14) r.safeHist.shift(); if ([[7, 0], [-7, 0], [0, 7], [0, -7]].every(([dx, dz]) => world.groundAt(r.x + dx, r.z + dz, f.h + 1).h > RUN.waterY)) r.lastSafe = r.safeHist[r.safeHist.length - 1] }
   }
 }
 
@@ -654,7 +655,11 @@ function physics(r, thr, dt, world, passive) {
     r.falling = true
     r.events.push({ t: 'splash', x: r.x, z: r.z })
     r.rope = null; r.climbing = null
-    const back = r.safeHist.length ? r.safeHist[Math.max(0, r.safeHist.length - 6)] : r.respawnPoint
+    // 戻る所は、川の縁から 7m 以上離れた所（縁に戻すと、次の隕石でまた落ちる）
+    const dry = q => [[7, 0], [-7, 0], [0, 7], [0, -7]].every(([dx, dz]) => world.groundAt(q.x + dx, q.z + dz, q.y + 1).h > RUN.waterY)
+    let back = null
+    for (let i = r.safeHist.length - 3; i >= 0 && !back; i--) if (i < r.safeHist.length && dry(r.safeHist[i])) back = r.safeHist[i]
+    back = back || (r.lastSafe && dry(r.lastSafe) ? r.lastSafe : null) || r.safeHist[0] || r.lastSafe || r.respawnPoint
     respawnRunner(r, back)
   }
   // 街の外へは出ない

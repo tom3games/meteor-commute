@@ -9,6 +9,7 @@
 
 import { DESTRUCT, PHYS, SURFACE, GAME } from './config.js?v=16'
 import { buildCity, cityTerrain } from './city.js?v=16'
+import { buildCommute } from './commutemap.js?v=2'
 
 export const FALL_SEC = 1.6  // 鉄塔が倒れ切るまで
 const sstep = (a, b, x) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t) }
@@ -444,13 +445,14 @@ export function slabTop(sl, v) {
 
 // ---------------------------------------------------------------- 世界
 export function createWorld(stage = 'touge') {
-  const city = stage === 'city'
-  const T = city ? buildCity() : build()
-  currentTerrain = city ? cityTerrain : tougeTerrain
+  const city = stage === 'city' || stage === 'commute'   // commute: 隕石の日でも出社する v2 の通勤路（街として描く）
+  const T = stage === 'commute' ? buildCommute() : city ? buildCity() : build()
+  const terr = T.terrain || (city ? cityTerrain : tougeTerrain)
+  currentTerrain = terr
   const w = {
     ...T,
     stage: city ? 'city' : 'touge',
-    terrain: city ? cityTerrain : tougeTerrain,
+    terrain: terr,
     bounds: T.bounds || BOUNDS,
     fallY: T.fallY ?? GAME.fallY,
     gates: normalizeGates(T.gates),

@@ -8,10 +8,10 @@ const SHAPES = {
   runner:  { W: 0.98, L: 2.2, H: 0.86, hood: 0.38, cabF: 0.55, cabR: -0.95, track: 0.82, wing: true, bar: false, haunch: 1.04 },
   bruiser: { W: 1.06, L: 2.3, H: 1.04, hood: 0.5, cabF: 0.65, cabR: -1.15, track: 0.9, wing: false, bar: true, haunch: 1.03 },
   dart:    { W: 0.94, L: 2.1, H: 0.76, hood: 0.32, cabF: 0.45, cabR: -0.85, track: 0.79, wing: true, bar: false, haunch: 1.07 },
-  // 一般車
-  sedan:   { W: 0.92, L: 2.25, H: 0.98, hood: 0.36, cabF: 0.75, cabR: -1.25, track: 0.8, wing: false, bar: false, haunch: 1.0 },
-  van:     { W: 1.0, L: 2.35, H: 1.55, hood: 0.5, cabF: 1.55, cabR: -2.2, track: 0.86, wing: false, bar: false, haunch: 1.0 },
-  taxi:    { W: 0.92, L: 2.25, H: 0.98, hood: 0.36, cabF: 0.75, cabR: -1.25, track: 0.8, wing: false, bar: false, haunch: 1.0, sign: true }
+  // 一般車（2026-11-09 本人「車の横幅、多分狭い。比率がおかしい」: 幅 1.8→2.0m・長さ 4.5→4.8m・屋根は少し低く、客室を広く。cab で客室の幅も変える）
+  sedan:   { W: 1.0, L: 2.4, H: 0.92, hood: 0.36, cabF: 0.8, cabR: -1.3, track: 0.88, wing: false, bar: false, haunch: 1.0, cab: [0.96, 0.8] },
+  van:     { W: 1.05, L: 2.45, H: 1.55, hood: 0.5, cabF: 1.6, cabR: -2.25, track: 0.92, wing: false, bar: false, haunch: 1.0, cab: [0.97, 0.88] },
+  taxi:    { W: 1.0, L: 2.4, H: 0.92, hood: 0.36, cabF: 0.8, cabR: -1.3, track: 0.88, wing: false, bar: false, haunch: 1.0, sign: true, cab: [0.96, 0.8] }
 }
 
 const WHEEL_R = 0.36, WHEEL_Z = 1.35
@@ -103,7 +103,7 @@ function glassGeometry(S) {
   const section = z => {
     const [, k] = curve(st, z)
     const h = (S.H - base) * k
-    const w0 = S.W * 0.93, w1 = S.W * 0.66
+    const w0 = S.W * (S.cab ? S.cab[0] : 0.93), w1 = S.W * (S.cab ? S.cab[1] : 0.66)
     return [[0, base - 0.02], [w0, base - 0.02], [w0 * 0.97, base + h * 0.25], [w1 + (w0 - w1) * 0.25, base + h * 0.85], [w1, base + h], [0, base + h + 0.01]]
   }
   return loft(range(zr, zf, 24), section)
@@ -113,7 +113,8 @@ function roofGeometry(S) {
   const zf = S.cabF, zr = S.cabR, len = zf - zr
   const za = zr + len * 0.38, zb = zr + len * 0.6
   const base = S.hood + 0.04, top = S.H
-  const section = () => [[0, top - 0.02], [S.W * 0.62, top - 0.025], [S.W * 0.655, top + 0.005], [S.W * 0.5, top + 0.02], [0, top + 0.025]]
+  const k = S.cab ? S.cab[1] / 0.66 : 1
+  const section = () => [[0, top - 0.02], [S.W * 0.62 * k, top - 0.025], [S.W * 0.655 * k, top + 0.005], [S.W * 0.5 * k, top + 0.02], [0, top + 0.025]]
   return loft(range(za, zb, 4), section)
 }
 

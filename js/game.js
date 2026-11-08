@@ -1,4 +1,4 @@
-// 隕石の日でも出社する。空中出前（sky-delivery）のワイヤーと街を使った、隕石よけの出勤ゲーム
+// 隕石の日でも出社する。空中出前（sky-delivery）のワイヤーを使った、隕石よけの出勤ゲーム。v2 で通勤路の街を新しく作った（shared/commutemap.js）
 // 地面の赤い輪に隕石が落ちる。輪の外へ出ればよけられ、すぐ外（ギリギリ）でよけると勢いがつく。9:00 までに会社へ
 window.__jsUp = true
 import * as THREE from 'three'
@@ -11,8 +11,8 @@ import { Q, LOW } from './quality.js?v=16'
 import { RunnerModel } from './runnermodel.js?v=16'
 import { CharRunnerModel, loadCharAssets, charAssets, Person, PERSON } from './charmodel.js?v=16'
 import { createRunner, stepRunner, findAnchor, rayHit, floorAt, RUN } from '../shared/runner.js?v=16'
-import { COM, DEADLINE, createRun, stepRun, verdict, clockSec, fmtClock, goalOf, SKY } from '../shared/commute.js?v=1'
-import { dropAt } from '../shared/meteor.js?v=1'
+import { COM, DEADLINE, createRun, stepRun, verdict, clockSec, fmtClock, goalOf, SKY } from '../shared/commute.js?v=2'
+import { dropAt } from '../shared/meteor.js?v=2'
 import { createBot, botInput } from '../shared/bot.js?v=16'
 import { createStreet, buildPoles } from '../shared/street.js?v=16'
 import { addTown, clearShopFront } from '../shared/town.js?v=16'
@@ -71,7 +71,7 @@ const T = {
     officeWarn: '<small>あなた</small>会社の真上に…でかいのが', officeHit: '<small>部長</small>会社に落ちた。今日は休みや',
     arrive: '<small>受付</small>おはようございます', arriveLate: '<small>受付</small>部長、怒ってはりますよ', bossLand: '<small>部長</small>…ワシも今来たとこや', absent: '<small>部長</small>もうええ。今日は欠勤や',
     heli: '<small>中継</small>隕石の中、出社する会社員がいます',
-    stationName: '明星台駅', stationBoard: '運転見合わせ', officeName: 'ドンマイ商事', homeName: 'メゾン朝日',
+    stationName: '明星台駅', stationBoard: '運転見合わせ', officeName: 'ドンマイ商事', homeName: 'メゾン朝日', townName: 'ようこそ 朝日町', arcadeName: 'あさひ通り商店街', screenLines: ['隕石', '多数', '落下中'], screenFoot: '外出は控えて',
     titles: { early: '出勤記録', ontime: '出勤記録', late: '遅刻届', verylate: '遅刻届', absent: '欠勤届', dayoff: '臨時休業のお知らせ' },
     stamps: { early: '早出', ontime: '受理', late: '却下', verylate: '却下', absent: '欠勤', dayoff: '休業', pardon: '不問' },
     lab: { date: '日付', name: '氏名', live: '中継', arrive: '出社時刻', reason: '理由', reasonOk: '道中の災難', noReason: '特になし', boss: '部長の欄' },
@@ -113,7 +113,7 @@ const T = {
     officeWarn: '<small>You</small>Something big... right above the office', officeHit: '<small>Boss</small>It hit the office. Day off',
     arrive: '<small>Reception</small>Good morning', arriveLate: '<small>Reception</small>The boss is not happy', bossLand: '<small>Boss</small>...I just got here too', absent: '<small>Boss</small>Forget it. You are absent today',
     heli: '<small>Live</small>A worker is commuting through the meteors',
-    stationName: 'Myojodai Sta.', stationBoard: 'SUSPENDED', officeName: 'Donmai Trading', homeName: 'Maison Asahi',
+    stationName: 'Myojodai Sta.', stationBoard: 'SUSPENDED', officeName: 'Donmai Trading', homeName: 'Maison Asahi', townName: 'ASAHI-CHO', arcadeName: 'ASAHI-DORI ARCADE', screenLines: ['METEORS', 'FALLING', 'NOW'], screenFoot: 'STAY INSIDE',
     titles: { early: 'Attendance Record', ontime: 'Attendance Record', late: 'Late Arrival Form', verylate: 'Late Arrival Form', absent: 'Absence Form', dayoff: 'Office Closed Today' },
     stamps: { early: 'EARLY', ontime: 'OK', late: 'NO', verylate: 'NO', absent: 'ABSENT', dayoff: 'CLOSED', pardon: 'PARDON' },
     lab: { date: 'Date', name: 'Name', live: 'LIVE', arrive: 'Arrived', reason: 'Reason', reasonOk: 'On the way', noReason: 'None', boss: 'Boss' },
@@ -181,8 +181,8 @@ scene.add(hemi)
 let hemiBase = 1.8, dayK = -1
 loadSky(renderer, scene, sun, () => { hemiBase = 0.4; hemi.intensity = 0.4; dayK = -1 })
 const camera = new THREE.PerspectiveCamera(64, 1, 0.3, 2400)
-const world = createWorld('city')
-const HOME = { x: 30, y: 0, z: 842, r: 7 }   // 町の中心（空中出前の店の場所）
+const world = createWorld('commute')
+const HOME = COM.shop   // 家（メゾン朝日）の玄関の箱の場所
 clearShopFront(world, HOME)
 const built = buildScene(scene, world)
 for (const g of built.gates) g.grp.visible = false
@@ -203,7 +203,7 @@ const homeGroup = new THREE.Group()
   const wall = new THREE.MeshStandardMaterial({ color: 0xe6dccb, roughness: 0.9 })
   const body = new THREE.Mesh(new THREE.BoxGeometry(sp.hw * 2, sp.y1, sp.hl * 2), wall); body.position.set(0, sp.y1 / 2, 0); body.castShadow = body.receiveShadow = true
   const roof = new THREE.Mesh(new THREE.BoxGeometry(sp.hw * 2 + 0.6, 0.3, sp.hl * 2 + 0.6), new THREE.MeshStandardMaterial({ color: 0x4a4f58 })); roof.position.y = sp.y1 + 0.15
-  const door = new THREE.Mesh(new THREE.PlaneGeometry(1.1, 2.1), new THREE.MeshStandardMaterial({ color: 0x5b3a26 })); door.position.set(-sp.hw - 0.01, 1.05, 0); door.rotation.y = -Math.PI / 2
+  const door = new THREE.Mesh(new THREE.PlaneGeometry(1.1, 2.1), new THREE.MeshStandardMaterial({ color: 0x5b3a26 })); door.position.set(sp.hw + 0.01, 1.05, 0); door.rotation.y = Math.PI / 2
   homeGroup.add(body, roof, door); homeGroup.position.set(sp.cx, 0, sp.cz); scene.add(homeGroup)
 }
 const offBld = world.colliders.filter(o => o.kind === 'building' && !o.small && o.hw < 80).sort((a, b) => Math.hypot(a.cx - COM.officeBld.x, a.cz - COM.officeBld.z) - Math.hypot(b.cx - COM.officeBld.x, b.cz - COM.officeBld.z))[0]
@@ -212,32 +212,70 @@ const signs = (() => {
   const oc = document.createElement('canvas'); oc.width = 1024; oc.height = 192
   const otex = new THREE.CanvasTexture(oc); otex.colorSpace = THREE.SRGBColorSpace
   const oSign = new THREE.Mesh(new THREE.PlaneGeometry(16, 3), new THREE.MeshStandardMaterial({ map: otex, roughness: 0.6, emissive: 0xffffff, emissiveMap: otex, emissiveIntensity: 0.25 }))
-  oSign.position.set(offBld.cx - offBld.hw - 0.08, 9, COM.office.z); oSign.rotation.y = -Math.PI / 2; scene.add(oSign)
+  const fz = offBld.cz - offBld.hl - 0.3   // 入口は南の面（大通りの突き当たり）。ロビーのガラスの箱より前に貼る
+  oSign.position.set(COM.office.x, 9, fz - 0.08); oSign.rotation.y = Math.PI; scene.add(oSign)
+  const crown = new THREE.Mesh(new THREE.PlaneGeometry(36, 6.75), oSign.material)   // 屋上の社名（川の橋から真正面に見える）
+  crown.position.set(offBld.cx, offBld.y1 - 6, fz - 0.1); crown.rotation.y = Math.PI; scene.add(crown)
   const glass = new THREE.Mesh(new THREE.PlaneGeometry(6, 3.6), new THREE.MeshStandardMaterial({ color: 0x2c3a48, roughness: 0.1, metalness: 0.6 }))
-  glass.position.set(offBld.cx - offBld.hw - 0.06, 1.8, COM.office.z); glass.rotation.y = -Math.PI / 2; scene.add(glass)
-  const canopy = new THREE.Mesh(new THREE.BoxGeometry(3, 0.3, 8), new THREE.MeshStandardMaterial({ color: 0x1b2233 })); canopy.position.set(offBld.cx - offBld.hw - 1.5, 4, COM.office.z); scene.add(canopy)
+  glass.position.set(COM.office.x, 1.8, fz - 0.06); glass.rotation.y = Math.PI; scene.add(glass)
+  const canopy = new THREE.Mesh(new THREE.BoxGeometry(8, 0.3, 3), new THREE.MeshStandardMaterial({ color: 0x1b2233 })); canopy.position.set(COM.office.x, 4, fz - 1.5); scene.add(canopy)
   // 駅: 駅名の板と運転見合わせの電光板、改札の柵、線路に落ちた大きな隕石
   const sc = document.createElement('canvas'); sc.width = 1024; sc.height = 384
   const stex = new THREE.CanvasTexture(sc); stex.colorSpace = THREE.SRGBColorSpace
-  const S = COM.station, sg = new THREE.Group(); sg.position.set(S.x + 17, 0, S.z); scene.add(sg)
+  const S = COM.station, sg = new THREE.Group(); sg.position.set(S.x + 6.6, 0, S.z); scene.add(sg)
   const post = new THREE.MeshStandardMaterial({ color: 0x3a3f48, metalness: 0.4, roughness: 0.5 })
   for (const dz of [-4.5, 4.5]) { const p = new THREE.Mesh(new THREE.BoxGeometry(0.3, 6, 0.3), post); p.position.set(0, 3, dz); sg.add(p) }
   const board = new THREE.Mesh(new THREE.PlaneGeometry(9.6, 3.6), new THREE.MeshStandardMaterial({ map: stex, emissive: 0xffffff, emissiveMap: stex, emissiveIntensity: 0.55 })); board.position.set(-0.2, 5.2, 0); board.rotation.y = -Math.PI / 2; sg.add(board)
   for (let i = -2; i <= 2; i++) { const g = new THREE.Mesh(new THREE.BoxGeometry(0.8, 1.1, 0.25), new THREE.MeshStandardMaterial({ color: 0x8c96a3, metalness: 0.5, roughness: 0.4 })); g.position.set(-1.5, 0.55, i * 1.8); sg.add(g) }
-  const rock = new THREE.Mesh(view.rockGeos[2], view.coolMat); rock.scale.setScalar(4.2); rock.position.set(6, 2.4, -2); rock.rotation.set(0.4, 1, 0.2); sg.add(rock)
-  sg.userData.smoke = new THREE.Vector3(S.x + 23, 6, S.z - 2)
+  // 電車が止まった理由: 鉄道橋の上に落ちた大きな隕石
+  const rock = new THREE.Mesh(view.rockGeos[2], view.coolMat); rock.scale.setScalar(3.6); rock.position.set(150, 12.6, 788); rock.rotation.set(0.4, 1, 0.2); scene.add(rock)
+  sg.userData.smoke = new THREE.Vector3(150, 14, 788)
+  // 商店街の門の名前・百貨店の大型画面・広場の時計塔（文字は日英で描き直す）
+  const gc = document.createElement('canvas'); gc.width = 1024; gc.height = 160
+  const gtex = new THREE.CanvasTexture(gc); gtex.colorSpace = THREE.SRGBColorSpace
+  const gMat = new THREE.MeshStandardMaterial({ map: gtex, roughness: 0.6, emissive: 0xffffff, emissiveMap: gtex, emissiveIntensity: 0.2 })
+  const tc = document.createElement('canvas'); tc.width = 1024; tc.height = 160
+  const ttex = new THREE.CanvasTexture(tc); ttex.colorSpace = THREE.SRGBColorSpace
+  const tMat = new THREE.MeshStandardMaterial({ map: ttex, roughness: 0.6 })
+  for (const g of world.colliders.filter(o => o.look === 'gate')) for (const s of [-1, 1]) {
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(g.hw * 2 - 0.4, (g.y1 - g.y0) * 0.74), g.town ? tMat : gMat); m.position.set(g.cx, (g.y0 + g.y1) / 2, g.cz + s * (g.hl + 0.03)); m.rotation.y = s > 0 ? 0 : Math.PI; scene.add(m)
+  }
+  const vc = document.createElement('canvas'); vc.width = 512; vc.height = 1024
+  const vtex = new THREE.CanvasTexture(vc); vtex.colorSpace = THREE.SRGBColorSpace
+  const scr = world.colliders.find(o => o.look === 'screen')
+  if (scr) { const m = new THREE.Mesh(new THREE.PlaneGeometry(scr.hl * 2, scr.y1 - scr.y0), new THREE.MeshBasicMaterial({ map: vtex, toneMapped: false })); m.position.set(scr.cx + scr.hw + 0.32, (scr.y0 + scr.y1) / 2, scr.cz); m.rotation.y = Math.PI / 2; scene.add(m) }
+  const cc = document.createElement('canvas'); cc.width = cc.height = 128
+  const ctex = new THREE.CanvasTexture(cc); ctex.colorSpace = THREE.SRGBColorSpace
+  const ck = world.colliders.find(o => o.look === 'clock')
+  if (ck) { const plain = new THREE.MeshStandardMaterial({ color: 0x9c8f7a }), face = new THREE.MeshStandardMaterial({ map: ctex }); const m = new THREE.Mesh(new THREE.BoxGeometry(3.18, 2.6, 3.18), [face, face, plain, plain, face, face]); m.position.set(ck.cx, ck.y1 - 1.5, ck.cz); scene.add(m) }
+  let clockMin = -1
+  function setClock(sec) {
+    const mm = Math.floor(sec / 60); if (mm === clockMin) return; clockMin = mm
+    const x = cc.getContext('2d'); x.fillStyle = '#f4efe2'; x.fillRect(0, 0, 128, 128); x.strokeStyle = '#2b2e33'; x.lineWidth = 6; x.beginPath(); x.arc(64, 64, 56, 0, Math.PI * 2); x.stroke()
+    for (let i = 0; i < 12; i++) { const a = i / 12 * Math.PI * 2; x.lineWidth = i % 3 ? 3 : 6; x.beginPath(); x.moveTo(64 + Math.sin(a) * 44, 64 - Math.cos(a) * 44); x.lineTo(64 + Math.sin(a) * 52, 64 - Math.cos(a) * 52); x.stroke() }
+    const m = mm % 60, h = (mm / 60) % 12, hand = (a, L, w) => { x.lineWidth = w; x.lineCap = 'round'; x.beginPath(); x.moveTo(64, 64); x.lineTo(64 + Math.sin(a) * L, 64 - Math.cos(a) * L); x.stroke() }
+    hand(h / 12 * Math.PI * 2, 30, 7); hand(m / 60 * Math.PI * 2, 46, 4)
+    ctex.needsUpdate = true
+  }
+  setClock(COM.startMin * 60)
   // 家の表札
   const hc = document.createElement('canvas'); hc.width = 512; hc.height = 128
   const htex = new THREE.CanvasTexture(hc); htex.colorSpace = THREE.SRGBColorSpace
-  const hSign = new THREE.Mesh(new THREE.PlaneGeometry(4.4, 1.1), new THREE.MeshStandardMaterial({ map: htex })); hSign.position.set(sp.cx - sp.hw - 0.03, sp.y1 - 0.8, sp.cz); hSign.rotation.y = -Math.PI / 2; scene.add(hSign)
+  const hSign = new THREE.Mesh(new THREE.PlaneGeometry(4.4, 1.1), new THREE.MeshStandardMaterial({ map: htex })); hSign.position.set(sp.cx + sp.hw + 0.03, sp.y1 - 0.8, sp.cz); hSign.rotation.y = Math.PI / 2; scene.add(hSign)
   function redraw() {
     let x = oc.getContext('2d'); x.fillStyle = '#1b2233'; x.fillRect(0, 0, 1024, 192); x.fillStyle = '#f5f2ea'; x.font = '900 110px "M PLUS 1p", "BIZ UDPGothic", sans-serif'; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText(t('officeName'), 512, 100); otex.needsUpdate = true
     x = sc.getContext('2d'); x.fillStyle = '#f5f2ea'; x.fillRect(0, 0, 1024, 150); x.fillStyle = '#1b2233'; x.font = '96px "BIZ UDPGothic", sans-serif'; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText(t('stationName'), 512, 80)
     x.fillStyle = '#111'; x.fillRect(0, 150, 1024, 234); x.fillStyle = '#ff9a1f'; x.font = 'bold 110px "BIZ UDPGothic", sans-serif'; x.fillText(t('stationBoard'), 512, 270); stex.needsUpdate = true
     x = hc.getContext('2d'); x.fillStyle = '#5b3a26'; x.fillRect(0, 0, 512, 128); x.fillStyle = '#f5f2ea'; x.font = '70px "Klee One", serif'; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText(t('homeName'), 256, 66); htex.needsUpdate = true
+    x = gc.getContext('2d'); x.fillStyle = '#8b2a22'; x.fillRect(0, 0, 1024, 160); x.fillStyle = '#f7e9c8'; x.font = '900 104px "M PLUS 1p", "BIZ UDPGothic", sans-serif'; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText(t('arcadeName'), 512, 86); gtex.needsUpdate = true
+    x = tc.getContext('2d'); x.fillStyle = '#2f6b4a'; x.fillRect(0, 0, 1024, 160); x.fillStyle = '#f5f2ea'; x.font = '900 100px "M PLUS 1p", "BIZ UDPGothic", sans-serif'; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText(t('townName'), 512, 86); ttex.needsUpdate = true
+    x = vc.getContext('2d'); x.fillStyle = '#0d1016'; x.fillRect(0, 0, 512, 1024); x.fillStyle = '#d8262a'; x.fillRect(0, 0, 512, 210); x.fillStyle = '#fff'; x.textAlign = 'center'; x.textBaseline = 'middle'
+    x.font = '900 120px "M PLUS 1p", "BIZ UDPGothic", sans-serif'; x.fillText(t('breaking'), 256, 110)
+    x.font = '900 96px "M PLUS 1p", "BIZ UDPGothic", sans-serif'; t('screenLines').forEach((l, i) => x.fillText(l, 256, 360 + i * 150))
+    x.fillStyle = '#ffcf3a'; x.font = 'bold 64px "BIZ UDPGothic", sans-serif'; x.fillText(t('screenFoot'), 256, 930); vtex.needsUpdate = true
   }
   if (document.fonts) document.fonts.ready.then(redraw)
-  return { redraw, station: sg }
+  return { redraw, station: sg, setClock }
 })()
 // 行き先の光の柱（駅 → 会社）と地面の輪
 const goalMark = (() => {
@@ -731,8 +769,9 @@ function render(dt) {
     goalMark.ring.material.opacity = 0.6 + Math.sin(k6 / 220) * 0.3
     people(R0, dt)
   }
-  // 駅の隕石の煙
-  if (frameN % 6 === 0) fx.smoke(signs.station.userData.smoke.x, 6, signs.station.userData.smoke.z, { dark: 0.2, size: 4, life: 3, vy: 3, a: 0.4 })
+  if (R0) signs.setClock(clockSec(R0))   // 広場の時計塔はゲームの時刻
+  // 線路の隕石の煙
+  if (frameN % 6 === 0) fx.smoke(signs.station.userData.smoke.x, signs.station.userData.smoke.y, signs.station.userData.smoke.z, { dark: 0.2, size: 4, life: 3, vy: 3, a: 0.4 })
   aimMark.visible = false
   if (mode === 'play' && me && !me.rope && frameN % 4 === 0) aimMark.userData.p = findAnchor(world, me)
   const aimOn = mode === 'play' && me && !me.rope && !!aimMark.userData.p
@@ -799,7 +838,7 @@ function people(R0, dt) {
   })
   if (!kv) kohai.group.visible = false
   // 部長: 降りてきたら会社の前に立って手を挙げる
-  if (R0.bossLanded) { bossP.group.visible = true; bossP.group.position.set(COM.office.x - 10, 0, COM.office.z + 8); bossP.group.rotation.y = Math.atan2(me ? me.x - bossP.group.position.x : 0, me ? me.z - bossP.group.position.z : 1); bossP.update(dt, 'wave') }
+  if (R0.bossLanded) { bossP.group.visible = true; bossP.group.position.set(COM.bossSpot.x - 3, 0, COM.bossSpot.z - 2); bossP.group.rotation.y = Math.atan2(me ? me.x - bossP.group.position.x : 0, me ? me.z - bossP.group.position.z : 1); bossP.update(dt, 'wave') }
   else if (!bv) bossP.group.visible = false
 }
 function senpaiTick(dt) {
@@ -822,7 +861,7 @@ function senpaiTick(dt) {
 // ---------------------------------------------------------------- 検証用の窓口
 window.meteor = {
   get mode() { return mode }, log, get hitStop() { return hitStop }, get flashA() { return flashA }, get fovKick() { return fovKick }, get slowT() { return slowT }, get redA() { return redA },
-  get me() { return me }, get run() { return run }, get demo() { return demo }, world, camera, touchMode, cam, renderer, view, COM, SKY, RUN,
+  get me() { return me }, get run() { return run }, get demo() { return demo }, get street() { return street }, world, camera, touchMode, cam, renderer, view, COM, SKY, RUN,
   start: (seed, opt) => startRun(seed, opt), toTitle, showResult, setLang: l => { lang = l; applyLang() }, get lang() { return lang },
   dbg: {
     pause: on => { dbgPause = on }, step: n => { for (let i = 0; i < n; i++) stepOnce(); render(STEP) },

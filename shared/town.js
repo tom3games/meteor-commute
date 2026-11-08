@@ -64,31 +64,32 @@ export function addTown(world, shop) {
   town.shop = { cx: shop.x + SHOP_BOX.dx, cz: shop.z, yaw: 0, hw: SHOP_BOX.hw, hl: SHOP_BOX.hl, y0: sy, y1: sy + SHOP_BOX.h, kind: 'building', small: true, shop: true }
   addBox(world, town.shop)
   // 一軒家
-  for (const sp of HOUSE_SPOTS) {
+  for (const sp of world.townFill ? [] : HOUSE_SPOTS) {
     const y = g(sp.x, sp.z)
     const h = { cx: sp.x, cz: sp.z, yaw: 0, hw: HOUSE.hw, hl: HOUSE.hl, y0: y, y1: y + HOUSE.wall, kind: 'building', small: true, house: true, face: sp.face, gable: HOUSE.roof, ridgeX: true }
     addBox(world, h)
     town.houses.push(h)
   }
   const F = town.fill
+  const FILLX = world.townFill || FILL   // v2 の街は家・アパート・自販機の場所を地図が持つ（shared/commutemap.js）
   town.fountain = world.colliders.find(o => o.kind === 'fountain' && Math.abs(o.cx - shop.x) < 60 && Math.abs(o.cz - shop.z) < 60) || null
-  for (const sp of FILL.houses) {
+  for (const sp of FILLX.houses) {
     const y = g(sp.x, sp.z), alongX = sp.fz !== 0   // 間口の向き。玄関が南北なら間口は東西
     const h = { cx: sp.x, cz: sp.z, yaw: 0, hw: alongX ? HOUSE.hw : HOUSE.hl, hl: alongX ? HOUSE.hl : HOUSE.hw, y0: y, y1: y + HOUSE.wall, kind: 'building', small: true, fill: true, fx: sp.fx, fz: sp.fz, gable: HOUSE.roof, ridgeX: alongX }   // 棟は間口と平行
     addBox(world, h); F.houses.push(h)
   }
-  for (const sp of FILL.apts) {
+  for (const sp of FILLX.apts) {
     const y = g(sp.x, sp.z)
     const a = { cx: sp.x, cz: sp.z, yaw: 0, hw: APT.hw, hl: APT.hl, y0: y, y1: y + APT.h, kind: 'building', small: true, fill: true, fx: 0, fz: sp.fz }
     addBox(world, a); F.apts.push(a)
     addBox(world, { cx: sp.x + sp.fz * APT.hw / 2, cz: sp.z - sp.fz, yaw: 0, hw: 1.1, hl: 1.1, y0: a.y1, y1: a.y1 + 1.8, kind: 'tank' })   // 屋上の貯水槽
   }
-  for (const sp of FILL.vends) {
+  for (const sp of FILLX.vends) {
     const y = g(sp.x, sp.z), alongX = sp.fz !== 0
     const v = { cx: sp.x, cz: sp.z, yaw: 0, hw: alongX ? VEND.hw : VEND.hl, hl: alongX ? VEND.hl : VEND.hw, y0: y, y1: y + VEND.h, kind: 'vending', fx: sp.fx, fz: sp.fz, c: sp.c }
     addBox(world, v); F.vends.push(v)
   }
-  for (const sp of FILL.posts) {
+  for (const sp of FILLX.posts) {
     const y = g(sp.x, sp.z)
     const q = { cx: sp.x, cz: sp.z, yaw: 0, hw: 0.2, hl: 0.2, y0: y, y1: y + POST_H[sp.kind], kind: 'post', post: sp.kind, nx: sp.nx, nz: sp.nz }
     addBox(world, q); F.posts.push(q)

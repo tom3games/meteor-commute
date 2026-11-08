@@ -11,7 +11,7 @@ export const STREET = {
   peds: 60, pedRange: 150, pedWalk: 1.3,   // 36 から 60 に（2026-11-03 本人「交通量をもっと」）
   carGap: 210,          // 車線 210m に1台（WIRE ESCAPE は 340m。同上）
   pedR: 0.9,            // 通行人に当たる距離
-  carHalfW: 1.2, carHalfL: 2.6,
+  carHalfW: 1.0, carHalfL: 2.45,   // v2 で車を実寸に（幅 2.0m・長さ 4.9m）
   hitCd: 1.2,           // 続けて当たらない間
   trafficSpeed: 0.55
 }
@@ -32,6 +32,10 @@ export function buildPoles(world, center) {
   if (world.poles) return world.poles
   const town = addTown(world, center)   // 町を先に置く（呼ぶ順で電柱の場所が変わらないように）
   const poles = [], G = world.cityGrid
+  if (world.mapPoles) {
+    // v2 の街: 電柱・街灯・架線柱の場所は地図が決めている（shared/commutemap.js）
+    for (const q of world.mapPoles) poles.push({ ...q })
+  } else {
   const lines = [...G.XS.map(x => ({ x })), ...G.ZS.map(z => ({ z }))]
   for (const sg of world.segs) {
     if (sg.surf !== 'road' || sg.hw < 6) continue
@@ -55,10 +59,11 @@ export function buildPoles(world, center) {
       k++
     }
   }
+  }
   // 元からある街灯・信号・木（world.objects）も掛け点にする（見た目は scene.js が描いているので prop: true で区別）
   for (const o of world.objects) {
     if (!['lamp', 'signal', 'tree'].includes(o.type) || o.gone) continue   // gone: 店の前で抜いた木。見えないのに掛かっていた
-    if (Math.abs(o.cx - center.x) > STREET.area + 60 || Math.abs(o.cz - center.z) > STREET.area + 60) continue
+    if (!world.mapPoles && (Math.abs(o.cx - center.x) > STREET.area + 60 || Math.abs(o.cz - center.z) > STREET.area + 60)) continue
     poles.push({ x: o.cx, z: o.cz, y0: o.y0, y1: o.y0 + (o.type === 'tree' ? 9 : o.def.h), kind: o.type, prop: true })
   }
   // 店の周りの町: 路地の電柱・街灯（見た目は buildPoles3d）。自動販売機は低い掛け点（low。タップした時だけ掛かる。見た目は buildHouses3d）
@@ -82,6 +87,7 @@ export function createStreet(world, seed = 1, center = { x: 30, z: 842 }) {
     const ux = dx / L, uz = dz / L, nx = -uz, nz = ux
     for (const s of [-1, 1]) walks.push({ ax: sg.ax + nx * (sg.hw + 2.6) * s, az: sg.az + nz * (sg.hw + 2.6) * s, ux, uz, L })
   }
+  for (const w of world.extraWalks || []) walks.push(w)   // 商店街の中・駅前広場（地図が決める）
   const peds = []
   for (let i = 0; i < STREET.peds; i++) peds.push({ id: i, x: 1e6, y: 0, z: 1e6, yaw: 0, w: null, u: 0, dir: 1, look: i % 6, speed: STREET.pedWalk * (0.8 + rnd() * 0.5), bumped: 0 })
   const place = (p, r) => {
@@ -123,6 +129,7 @@ export function createStreet(world, seed = 1, center = { x: 30, z: 842 }) {
       }
     }
     for (const c of traffic.cars) {
+      if (c.hidden) continue
       const dx = r.x - c.x, dz = r.z - c.z
       if (dx * dx + dz * dz > 16) continue
       const cs = Math.sin(c.yaw), cc = Math.cos(c.yaw), along = dx * cs + dz * cc, side = dx * cc - dz * cs

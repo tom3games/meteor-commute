@@ -7,6 +7,7 @@ import { Q } from './quality.js?v=16'
 import { createFacade } from './facade.js?v=16'
 import { terrain, toWorld, slabTop, forestDensity } from '../shared/track.js?v=16'
 import { DESTRUCT } from '../shared/config.js?v=16'
+import { drawLook, drawDeco } from './map3d.js?v=2'
 
 const PAL = {
   grass: 0x6f9a4a, grass2: 0x86ab55, dirt: 0x9a7a52, rock: 0x8a6a55, rockDark: 0x5e4a3f, city: 0x8a8e94,
@@ -72,7 +73,7 @@ export function buildScene(scene, world) {
 
   // ---------------------------------------- 道路（地形に沿う帯）＋ 白線・黄線・路肩
   {
-    const pave = new Builder(), soilB = new Builder(), lines = new Builder()
+    const pave = new Builder(), soilB = new Builder(), lines = new Builder(), tileB = new Builder()
     const hAt = (x, z) => terrain(x, z)
     let lift = 0.06
     const WHITE = 0xf2f0e8, YELLOW = 0xf0b419
@@ -95,7 +96,7 @@ export function buildScene(scene, world) {
     }
     for (const r of world.roads) {
       lift += 0.004
-      const city = r.pts.every(([, z]) => z < 626)
+      const city = CITY || r.pts.every(([, z]) => z < 626)
       for (let i = 0; i < r.pts.length - 1; i++) {
         const [ax0, az0] = r.pts[i], [bx0, bz0] = r.pts[i + 1]
         const L = Math.hypot(bx0 - ax0, bz0 - az0)
@@ -104,6 +105,7 @@ export function buildScene(scene, world) {
         const e = r.w / 2
         const ax = ax0 - dx * e, az = az0 - dz * e, bx = bx0 + dx * e, bz = bz0 + dz * e
         if (r.surf === 'dirt') { strip(soilB, ax, az, bx, bz, 0, r.w / 2, lift, 0xffffff); continue }
+        if (r.tile) { strip(tileB, ax, az, bx, bz, 0, r.w / 2, lift, 0xd8cfc2); continue }   // 商店街の石畳
         strip(pave, ax, az, bx, bz, 0, r.w / 2, lift, 0xffffff)
         if (r.w < 8) continue
         // 白線（端）は角で途切れさせる。センターは市街なら白の破線、山なら黄色の実線（追い越し禁止）
@@ -116,6 +118,7 @@ export function buildScene(scene, world) {
     }
     const rm = new THREE.Mesh(pave.geometry(), asphaltMat); rm.receiveShadow = true; root.add(rm)
     const dm = new THREE.Mesh(soilB.geometry(), dirtMat); dm.receiveShadow = true; root.add(dm)
+    if (!tileB.empty) { const tm = new THREE.Mesh(tileB.geometry(), concrete); tm.receiveShadow = true; root.add(tm) }
     const lm = new THREE.Mesh(lines.geometry(), new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.55, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -5, polygonOffsetUnits: -5 }))
     lm.receiveShadow = true
     root.add(lm)
@@ -127,6 +130,7 @@ export function buildScene(scene, world) {
     const G = world.cityGrid
     for (const r of world.roads) {
       if (r.w < 12) continue
+      if (r.pts.length !== 2) continue
       const [[ax, az], [bx, bz]] = r.pts
       const L = Math.hypot(bx - ax, bz - az), dx = (bx - ax) / L, dz = (bz - az) / L
       for (const s2 of [-1, 1]) {
@@ -232,12 +236,20 @@ export function buildScene(scene, world) {
     for (const o of world.colliders) {
       if (o.slab || o.kind === 'bound' || o.kind === 'pylon' || o.kind === 'tree') continue
       const cy = o.y0 + o.h / 2
+      if (o.look) { drawLook(o, { conc, met, other, facade }); continue }   // v2 の街の掛け点（高架・看板・クレーンなど。js/map3d.js）
+      if (o.kind === 'building' && o.station) {
+        // 高架の下の駅舎: 白い壁と、広場に向いたガラスの入口
+        other.box(o.cx, cy, o.cz, o.hw, o.h / 2, o.hl, 0xf0ece2)
+        other.box(o.cx - o.hw - 0.02, 2.2, o.cz, 0.02, 2.2, 16, 0x2c3a48)
+        other.box(o.cx - o.hw - 0.03, 5.4, o.cz, 0.02, 0.5, o.hl - 2, 0x1f8a52)
+        continue
+      }
       if (o.kind === 'building') {
         const kk = k++
         const hz = ((kk * 2654435761) >>> 0) / 4294967296   // ビルごとの揺らぎ（同じ色が並ばないように）
         const color = new THREE.Color(BUILD_COLORS[(kk * 5) % BUILD_COLORS.length]).lerp(new THREE.Color(hz < 0.5 ? 0xffffff : 0xd8c8b0), 0.12 + hz * 0.4).offsetHSL((hz - 0.5) * 0.04, (hz - 0.5) * 0.12, (((kk * 7) % 5) - 2) * 0.025)
         // 外壁の型: 高いビルはガラスか事務所、低いものはマンション・レンガ・事務所
-        const style = o.h > 55 ? [2, 0, 1, 2, 0][kk % 5] : [1, 0, 3, 1, 2, 3, 0][kk % 7]
+        const style = o.company ? 2 : o.dept ? 0 : o.h > 55 ? [2, 0, 1, 2, 0][kk % 5] : [1, 0, 3, 1, 2, 3, 0][kk % 7]
         if (o.yaw) bld.box(o.cx, cy, o.cz, o.hw, o.h / 2, o.hl, color.getHex(), o.yaw, { noTop: true, shade: false })
         else facade.building(o.cx - o.hw, o.cz - o.hl, o.cx + o.hw, o.cz + o.hl, o.y0, o.h, style, color.getHex(), (kk * 0.618) % 1)
         // 縦看板（通りから見える面の角）と屋上の広告
@@ -272,6 +284,7 @@ export function buildScene(scene, world) {
         rock.box(o.cx + 0.4, o.y0 + o.h * 0.9, o.cz - 0.3, o.hw * 0.6, o.h * 0.25, o.hl * 0.6, 0xe4dcd2, o.yaw + 0.5)
       } else conc.box(o.cx, cy, o.cz, o.hw, o.h / 2, o.hl, 0xd0ccc4, o.yaw)
     }
+    drawDeco(world, { conc, met, other }, root)
     for (const [b, mat] of [[bld, buildingMat], [conc, concrete], [rock, rockMat], [met, metal], [other, vc]]) {
       if (b.empty) continue
       const m = new THREE.Mesh(b.geometry(), mat)

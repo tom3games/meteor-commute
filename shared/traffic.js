@@ -13,14 +13,14 @@ export function createTraffic(world, gap = 340) {   // gap: 車線何 m に1台�
   const lines = []
   // 幅 18m 以上の真っすぐな通り（路地は走らない）
   for (const r of world.roads) {
-    if (r.w < 18 || r.pts.length !== 2) continue
+    if (r.lanes === null || (r.lanes === undefined && r.w < 18) || r.pts.length !== 2) continue   // v2 の街は道ごとに車線を持つ（lanes）
     const [[ax, az], [bx, bz]] = r.pts
     const L = Math.hypot(bx - ax, bz - az)
     if (L < 60) continue
     const dx = (bx - ax) / L, dz = (bz - az) / L
     // 片側の車線の中心。大通り（28m）は片側2車線
-    const lanes = r.w >= 28 ? [3.6, 10] : [4.4]
-    for (const dir of [1, -1]) for (const lane of lanes) lines.push({ ax, az, dx, dz, L, dir, lane })
+    const lanes = r.lanes || (r.w >= 28 ? [3.6, 10] : [4.4])
+    for (const dir of [1, -1]) for (const lane of lanes) lines.push({ ax, az, dx, dz, L, dir, lane, v2: !!r.lanes })
   }
   lines.forEach((ln, li) => {
     const n = Math.max(1, Math.round(ln.L / gap))
@@ -46,6 +46,7 @@ export function createTraffic(world, gap = 340) {   // gap: 車線何 m に1台�
     // 地面の高さ（橋・ジャンプ台）は重いので、近くの車だけ調べる。遠くは平らな道の高さ
     c.y = (exact ? world.groundAt(c.x, c.z, 5).h : 0) + PHYS.rideHeight
     c.far = !exact
+    c.hidden = !!ln.v2 && (s < 12 || s > ln.L - 12)   // v2: 道の端（広場や交差点で終わる所）では見せない
     c.vx = fx * c.speed; c.vz = fz * c.speed; c.vy = 0
     c.yaw = Math.atan2(fx, fz)
     c.pitch = 0; c.roll = 0

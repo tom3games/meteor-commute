@@ -15,3 +15,6 @@ const r = await esbuild.build({
 })
 const out = r.metafile.outputs['dist/game.js']
 console.log('dist/game.js', (out.bytes / 1024).toFixed(0) + 'KB', Object.keys(r.metafile.inputs).length + 'files')
+// 画面で使う文字だけのフォントの読み込みを index.html に書き直す（文字が増えても漏れない）
+const { execFileSync } = await import('node:child_process')
+execFileSync(process.execPath, [resolve(ROOT, 'tools/fontlink.mjs')], { cwd: ROOT, stdio: 'inherit' })
