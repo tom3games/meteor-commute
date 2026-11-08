@@ -9,10 +9,10 @@ import { FX } from './fx.js?v=16'
 import { loadSky, setAniso } from './look.js?v=16'
 import { Q, LOW } from './quality.js?v=16'
 import { RunnerModel } from './runnermodel.js?v=16'
-import { CharRunnerModel, loadCharAssets, charAssets, Person, PERSON } from './charmodel.js?v=16'
+import { CharRunnerModel, loadCharAssets, charAssets, Person, PERSON, Officer } from './charmodel.js?v=17'
 import { createRunner, stepRunner, findAnchor, rayHit, floorAt, RUN } from '../shared/runner.js?v=16'
-import { COM, DEADLINE, createRun, stepRun, verdict, clockSec, fmtClock, goalOf, SKY } from '../shared/commute.js?v=2'
-import { dropAt } from '../shared/meteor.js?v=2'
+import { COM, DEADLINE, createRun, stepRun, verdict, clockSec, fmtClock, goalOf, SKY } from '../shared/commute.js?v=3'
+import { dropAt } from '../shared/meteor.js?v=3'
 import { createBot, botInput } from '../shared/bot.js?v=16'
 import { createStreet, buildPoles } from '../shared/street.js?v=16'
 import { addTown, clearShopFront } from '../shared/town.js?v=16'
@@ -53,8 +53,8 @@ const T = {
     memoFrom: '総務部より', memoDate: '本日付', howTitle: '隕石の日の出社について', ok: '承知しました',
     howItems: [
       '移動はビルを<b>タッチ</b>してワイヤーで行うこと。右下の大きいボタンでも可',
-      '地面の<b>赤い輪</b>には隕石が落ちる。影が濃くなる前に<b>輪の外</b>へ出ること',
-      '輪の<b>すぐ外</b>でよけると勢いがつく。各自、<b>9:00</b>までに出社すること'
+      '地面の<b>赤い輪</b>には隕石が落ちる。当たるたびに<b>スーツが燃え</b>、パンツ一丁でもう一度当たると警察に保護される',
+      '輪の<b>すぐ外</b>でよけると勢いがつく。服は<b>紳士服の店</b>の緑の輪で1段戻る。各自、<b>9:00</b>までに出社すること'
     ],
     keysPc: 'PC: WASD・矢印で移動　クリックでワイヤー（E は前の上へ自動）　Space ジャンプ　ドラッグで見回す',
     credit: '音・人物: Kenney, rubberduck, poinl, Almitory, WuxiaScrub, KayKit ほか（CC0）。詳しくは CREDITS.md',
@@ -86,7 +86,14 @@ const T = {
       late: '隕石は理由にならん。みんな来とる', lateHits: '飛ばされたんなら受け身を覚えろ', lateNear: 'よけるのは上手いんやけどな。間に合わせろ',
       verylate: '昼から来るつもりか', pardon: '今日のことは、お互い忘れよう'
     },
-    postText: (s, c) => `隕石の日に出社した。${c}（ギリギリ回避${s.near}回）`
+    postText: (s, c) => `隕石の日に出社した。${c}（ギリギリ回避${s.near}回）`,
+    suitSay: ['', '<small>あなた</small>スーツが焦げた', '<small>あなた</small>上着が燃えた…', '<small>あなた</small>シャツまで燃えた', '<small>あなた</small>パンツしか残ってない'],
+    police: '<small>警察</small>そこの下着の男性、止まりなさい！', arrestSay: '<small>警察</small>確保ー！', arrestSay2: '<small>あなた</small>出社するだけなんです…',
+    tailorSay: '<small>紳士服の店</small>お急ぎですね。こちらでどうぞ', tailorName: ['紳士服 アサヒ', '紳士服 ヒノデ'], konbiniName: 'ヒノデマート', cleanerName: 'クリーニング',
+    arrestTitle: '警察署からのお知らせ', arrestStamp: '保護', arrestLab: '保護時刻', arrestCaption: 'パンツ一丁で確保される会社員',
+    arrestReasons: ['下着姿で市内を走っていたため', n => `隕石でスーツが燃えたため（${n}回）`, '「出社するだけ」と供述'],
+    arrestComment: '迎えに行くの、ワシやぞ', arrestPlace: ['朝日町の住宅街', 'あさひ通り商店街', '明星台駅前', '川の上', 'ひので町', '本町大通り'],
+    statL3: '焼けた', suitWord: ['無事', '焦げ', '上着なし', 'シャツなし', 'パンツ一丁']
   },
   en: {
     breaking: 'BREAKING', news: ['Meteors expected across the city this morning', 'All trains suspended', 'Officials: impact spots glow red on the ground', 'Non-essential commuting is...'],
@@ -95,8 +102,8 @@ const T = {
     memoFrom: 'From: General Affairs', memoDate: 'Today', howTitle: 'Commuting on meteor day', ok: 'Got it',
     howItems: [
       '<b>Tap</b> a building to shoot a wire. The big button aims ahead for you',
-      'Meteors land in the <b>red rings</b>. Get <b>outside the ring</b> before the shadow fills it',
-      'Dodge <b>just outside</b> the ring for a speed boost. Reach the office by <b>9:00</b>'
+      'Meteors land in the <b>red rings</b>. Each hit <b>burns your suit</b>. Get hit again in your underwear and the police take you in',
+      'Dodge <b>just outside</b> the ring for a boost. The green ring at a <b>tailor</b> mends one layer. Reach the office by <b>9:00</b>'
     ],
     keysPc: 'PC: WASD / arrows move · click to wire (E auto-aims) · Space jump · drag to look',
     credit: 'Sounds and characters: Kenney, rubberduck, poinl, Almitory, WuxiaScrub, KayKit and others (CC0). See CREDITS.md',
@@ -128,7 +135,14 @@ const T = {
       late: 'Meteors are not an excuse. Everyone else made it', lateHits: 'If you get blown away, learn to land', lateNear: 'Great dodging. Now be on time',
       verylate: 'Planning to come after lunch?', pardon: 'Let us both forget about today'
     },
-    postText: (s, c) => `I commuted on meteor day. ${c} (${s.near} close calls)`
+    postText: (s, c) => `I commuted on meteor day. ${c} (${s.near} close calls)`,
+    suitSay: ['', '<small>You</small>My suit is scorched', '<small>You</small>The jacket burned off...', '<small>You</small>Now the shirt too', '<small>You</small>Only my underwear is left'],
+    police: '<small>Police</small>You in the underwear! Stop right there!', arrestSay: '<small>Police</small>Got him!', arrestSay2: '<small>You</small>I am just going to work...',
+    tailorSay: '<small>Tailor</small>In a hurry? Right this way', tailorName: ['ASAHI SUITS', 'HINODE SUITS'], konbiniName: 'HINODE MART', cleanerName: 'CLEANERS',
+    arrestTitle: 'Notice from the Police', arrestStamp: 'HELD', arrestLab: 'Held at', arrestCaption: 'Worker caught in his underwear',
+    arrestReasons: ['Running through the city in underwear', n => `Suit burned by meteors (${n} times)`, 'Said "I am just going to work"'],
+    arrestComment: 'And now I have to come pick you up', arrestPlace: ['Asahi-cho', 'Asahi-dori Arcade', 'Myojodai Sta.', 'on the bridge', 'Hinode-cho', 'Honmachi Ave.'],
+    statL3: 'Burned', suitWord: ['OK', 'Scorched', 'No jacket', 'No shirt', 'Underwear']
   }
 }
 let lang = store.get('met.lang') || ((navigator.language || 'ja').startsWith('ja') ? 'ja' : 'en')
@@ -143,6 +157,7 @@ function applyLang() {
   $('btnMute').textContent = Snd.muted ? t('muteOff') : t('muteOn')
   $('newsText').textContent = t('news').join('　／　')
   signs && signs.redraw()
+  shopSigns && shopSigns.redraw()
 }
 
 // ---------------------------------------------------------------- 音（録音素材だけ）
@@ -202,7 +217,7 @@ const homeGroup = new THREE.Group()
 {
   const wall = new THREE.MeshStandardMaterial({ color: 0xe6dccb, roughness: 0.9 })
   const body = new THREE.Mesh(new THREE.BoxGeometry(sp.hw * 2, sp.y1, sp.hl * 2), wall); body.position.set(0, sp.y1 / 2, 0); body.castShadow = body.receiveShadow = true
-  const roof = new THREE.Mesh(new THREE.BoxGeometry(sp.hw * 2 + 0.6, 0.3, sp.hl * 2 + 0.6), new THREE.MeshStandardMaterial({ color: 0x4a4f58 })); roof.position.y = sp.y1 + 0.15
+  const roof = new THREE.Mesh(new THREE.BoxGeometry(sp.hw * 2 + 0.6, 0.3, sp.hl * 2 + 0.6), new THREE.MeshStandardMaterial({ color: 0x4a4f58 })); roof.position.y = sp.y1 - 0.13
   const door = new THREE.Mesh(new THREE.PlaneGeometry(1.1, 2.1), new THREE.MeshStandardMaterial({ color: 0x5b3a26 })); door.position.set(sp.hw + 0.01, 1.05, 0); door.rotation.y = Math.PI / 2
   homeGroup.add(body, roof, door); homeGroup.position.set(sp.cx, 0, sp.cz); scene.add(homeGroup)
 }
@@ -274,7 +289,7 @@ const signs = (() => {
     x.font = '900 96px "M PLUS 1p", "BIZ UDPGothic", sans-serif'; t('screenLines').forEach((l, i) => x.fillText(l, 256, 360 + i * 150))
     x.fillStyle = '#ffcf3a'; x.font = 'bold 64px "BIZ UDPGothic", sans-serif'; x.fillText(t('screenFoot'), 256, 930); vtex.needsUpdate = true
   }
-  if (document.fonts) document.fonts.ready.then(redraw)
+  if (document.fonts) document.fonts.ready.then(() => { redraw(); shopSigns && shopSigns.redraw() })
   return { redraw, station: sg, setClock }
 })()
 // 行き先の光の柱（駅 → 会社）と地面の輪
@@ -316,6 +331,80 @@ for (const p of [kohai, senpai, bossP]) { p.group.visible = false; scene.add(p.g
 const senpaiRock = new THREE.Group()
 { const r = new THREE.Mesh(view.rockGeos[1], view.rockMat); r.scale.set(2.2, 0.9, 1.6); const c = new THREE.Mesh(view.rockGeos[3], view.coreMat); c.scale.set(2, 0.8, 1.4); const gl = new THREE.Sprite(view.glowMat); gl.scale.setScalar(8); senpaiRock.add(r, c, gl); senpaiRock.visible = false; scene.add(senpaiRock) }
 
+// v3: 警察（パンツ一丁で捕まる場面）。白黒のパトカーと警官2人
+const police = (() => {
+  // パトカー（白黒）: 下半分が黒、上と屋根が白、屋根に赤色灯。前は +z
+  const g = new THREE.Group(), M = (c, o = {}) => new THREE.MeshStandardMaterial({ color: c, roughness: 0.4, metalness: 0.15, ...o })
+  const add = (geo, m, x, y, z) => { const o = new THREE.Mesh(geo, m); o.position.set(x, y, z); o.castShadow = true; g.add(o); return o }
+  const white = M(0xf2f2ee), black = M(0x16171b), glass = M(0x1f2a36, { roughness: 0.1, metalness: 0.5 })
+  add(new THREE.BoxGeometry(1.8, 0.5, 4.7), black, 0, 0.55, 0)
+  add(new THREE.BoxGeometry(1.82, 0.22, 4.72), white, 0, 0.9, 0)
+  add(new THREE.BoxGeometry(1.62, 0.5, 2.3), glass, 0, 1.26, -0.2)
+  add(new THREE.BoxGeometry(1.5, 0.06, 2.1), white, 0, 1.53, -0.2)
+  for (const sx of [-1, 1]) add(new THREE.BoxGeometry(0.06, 0.5, 0.18), white, sx * 0.8, 1.26, 0.4)
+  const red = new THREE.MeshStandardMaterial({ color: 0xff2a1a, emissive: 0xff2a1a, emissiveIntensity: 2 })
+  add(new THREE.BoxGeometry(1.1, 0.16, 0.32), red, 0, 1.64, -0.1)
+  for (const [x, z] of [[-0.82, 1.45], [0.82, 1.45], [-0.82, -1.45], [0.82, -1.45]]) { const w = add(new THREE.CylinderGeometry(0.34, 0.34, 0.26, 16), black, x, 0.34, z); w.rotation.z = Math.PI / 2 }
+  for (const sx of [-1, 1]) add(new THREE.BoxGeometry(0.3, 0.1, 0.04), M(0xfff6d8, { emissive: 0xfff6d8, emissiveIntensity: 0.6 }), sx * 0.6, 0.78, 2.36)
+  g.visible = false; scene.add(g)
+  const car = { group: g, update(st) { g.position.set(st.x, st.y, st.z); g.rotation.set(0, st.yaw, 0) } }
+  const offs = [new Officer(), new Officer()]
+  for (const o of offs) { o.group.visible = false; scene.add(o.group) }
+  return { car, red, offs, st: null }
+})()
+// 紳士服の店の前の緑の輪（入るとスーツが1段戻る）と、店・コンビニ・クリーニング店の看板の文字
+const tailorRings = COM.tailors.map(T => {
+  const g = new THREE.Group()
+  const ring = new THREE.Mesh(new THREE.RingGeometry(T.r - 0.35, T.r, 40).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0x45d07a, transparent: true, opacity: 0.85, depthWrite: false })); ring.position.y = 0.09
+  const fill = new THREE.Mesh(new THREE.CircleGeometry(T.r - 0.35, 40).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0x45d07a, transparent: true, opacity: 0.2, depthWrite: false })); fill.position.y = 0.08
+  // 輪の上に浮かぶハンガー（細い線の形）
+  const hm = new THREE.MeshBasicMaterial({ color: 0x45d07a })
+  const hanger = new THREE.Group()
+  const hook = new THREE.Mesh(new THREE.TorusGeometry(0.16, 0.035, 6, 16, Math.PI * 1.4), hm); hook.position.y = 0.42; hook.rotation.z = -0.3
+  const L = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.85, 6), hm); L.rotation.z = Math.PI / 2 - 0.5; L.position.set(-0.36, 0.05, 0)
+  const Rr = L.clone(); Rr.rotation.z = -(Math.PI / 2 - 0.5); Rr.position.x = 0.36
+  const B = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 1.5, 6), hm); B.rotation.z = Math.PI / 2; B.position.y = -0.17
+  hanger.add(hook, L, Rr, B); hanger.position.y = 2.4
+  g.add(ring, fill, hanger); g.position.set(T.x, world.groundAt(T.x, T.z, 2).h, T.z); scene.add(g)
+  return { g, ring, fill, hanger }
+})
+const shopSigns = (() => {
+  const list = []
+  for (const o of world.colliders) {
+    if (!['konbini', 'cleaner', 'tailor'].includes(o.look)) continue
+    const c = document.createElement('canvas'); c.width = 512; c.height = 128
+    const tx = new THREE.CanvasTexture(c); tx.colorSpace = THREE.SRGBColorSpace
+    const H = o.look === 'tailor' ? 1.5 : 0.9, W = Math.min(o.hl * 2 - 1, H * 4)
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(W, H), new THREE.MeshStandardMaterial({ map: tx, emissive: 0xffffff, emissiveMap: tx, emissiveIntensity: 0.3 }))
+    const nx = o.nx || 1
+    m.position.set(o.cx + nx * (o.hw + 0.09), o.look === 'tailor' ? o.y1 - 1.2 : o.y1 - 0.62, o.cz); m.rotation.y = nx > 0 ? Math.PI / 2 : -Math.PI / 2
+    scene.add(m)
+    const ti = COM.tailors.findIndex(T => Math.abs(T.z - o.cz) < 14 && Math.abs(T.x - o.cx) < 20)
+    list.push({ o, c, tx, ti })
+  }
+  // 商店街の紳士服の店（アーケードの中、西側の店の1階）
+  for (const T of COM.tailors) {
+    if (list.some(q => q.ti >= 0 && COM.tailors[q.ti] === T)) continue
+    const c = document.createElement('canvas'); c.width = 512; c.height = 128
+    const tx = new THREE.CanvasTexture(c); tx.colorSpace = THREE.SRGBColorSpace
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(4.4, 1.1), new THREE.MeshStandardMaterial({ map: tx, emissive: 0xffffff, emissiveMap: tx, emissiveIntensity: 0.3 }))
+    m.position.set(-5.4, 3.3, T.z); m.rotation.y = Math.PI / 2; scene.add(m)
+    list.push({ o: { look: 'tailor' }, c, tx, ti: COM.tailors.indexOf(T) })
+  }
+  function redraw() {
+    for (const q of list) {
+      const x = q.c.getContext('2d'), L = q.o.look
+      const name = L === 'tailor' ? t('tailorName')[q.ti >= 0 ? COM.tailors[q.ti].name : 0] : L === 'konbini' ? t('konbiniName') : t('cleanerName')
+      x.fillStyle = L === 'tailor' ? '#1b2233' : L === 'cleaner' ? '#2d6fb8' : '#f6f6f2'; x.fillRect(0, 0, 512, 128)
+      x.fillStyle = L === 'tailor' ? '#e7cf8a' : L === 'cleaner' ? '#fff' : '#2f7a4a'
+      x.font = `900 ${lang === 'ja' ? 76 : 64}px "M PLUS 1p", "BIZ UDPGothic", sans-serif`; x.textAlign = 'center'; x.textBaseline = 'middle'
+      let px = lang === 'ja' ? 76 : 64; while (x.measureText(name).width > 480 && px > 30) { px -= 4; x.font = `900 ${px}px "M PLUS 1p", "BIZ UDPGothic", sans-serif` }
+      x.fillText(name, 256, 68); q.tx.needsUpdate = true
+    }
+  }
+  return { redraw }
+})()
+
 // ---------------------------------------------------------------- 状態
 let mode = 'title', autoBot = null, snapAt = null
 const newsCam = new THREE.PerspectiveCamera(46, 1, 0.3, 2400)
@@ -326,7 +415,7 @@ let tut = store.get('met.tut') !== '1', tutWarn = false, tutNear = false, hintAt
 const cam = { hd: -Math.PI / 2, pitch: 0.15, userT: -1e9, pos: new THREE.Vector3(), off: new THREE.Vector3(-6, 3, 0), look: new THREE.Vector3(), lookOff: new THREE.Vector3(), fov: 64 }
 const _v = new THREE.Vector3(), _w = new THREE.Vector3()
 function spawnRunner(id) { return createRunner({ id, spawn: { x: COM.home.x, y: 0, z: COM.home.z, yaw: COM.home.yaw } }) }
-function newModel() { if (model) { scene.remove(model.group); model.dispose() } model = charAssets.ready ? new CharRunnerModel() : new RunnerModel(); scene.add(model.group); return model }
+function newModel() { const sn = model && model.suit || 0; if (model) { scene.remove(model.group); model.dispose() } model = charAssets.ready ? new CharRunnerModel() : new RunnerModel(); scene.add(model.group); if (model.setSuit && mode === 'play' && run) model.setSuit(run.suit); else if (model.setSuit) model.setSuit(0); return model }
 loadCharAssets().then(() => { if (charAssets.ready && model && !(model instanceof CharRunnerModel)) newModel() })
 function clearFires() { for (const o of world.colliders) if (o.burning) o.burning = 0 }
 
@@ -442,7 +531,7 @@ function gather() {
 
 // ---------------------------------------------------------------- 画面の切り替え
 function show(id) { for (const s of ['title', 'how', 'pause', 'result']) $(s).classList.toggle('hidden', s !== id); $('hud').classList.toggle('hidden', mode !== 'play') }
-function resetScene() { clearFires(); senpaiFly = null; for (const p of [kohai, senpai, bossP]) p.group.visible = false; senpaiRock.visible = false }
+function resetScene() { clearFires(); senpaiFly = null; for (const p of [kohai, senpai, bossP]) p.group.visible = false; senpaiRock.visible = false; police.st = null; police.car.group.visible = false; for (const o of police.offs) o.group.visible = false; setSuitHud(0); document.body.classList.remove('chased') }
 function toTitle() {
   mode = 'title'; paused = false; me = null; run = null; resetScene()
   const s = Math.floor(Math.random() * 1000)
@@ -476,6 +565,8 @@ let sayT = 0
 function say(html, sec = 1.8) { const el = $('say'); el.innerHTML = html; sayT = sec; el.classList.remove('hidden') }
 let nearT = 0
 function nearPop(txt, n) { const el = $('near'); $('nearTxt').textContent = txt; $('nearN').textContent = n >= 2 ? t('chain')(n) : ''; el.classList.remove('hidden', 'pop'); void el.offsetWidth; el.classList.add('pop'); nearT = 1.0 }
+// スーツの小さな絵（腕時計の横）。体の上の絵と同じ段階
+function setSuitHud(n) { const el = $('suit'); if (!el) return; if (el._n === n) return; el._n = n; el.setAttribute('class', 'suit s' + n); void el.getBoundingClientRect(); if (n) el.classList.add('pop') }
 function updateHud(dt) {
   const c = clockSec(run), G = goalOf(run)
   const h = Math.floor(c / 3600), m = Math.floor(c / 60) % 60, s = c % 60
@@ -557,8 +648,10 @@ function onSkyEvent(e, live) {
   else if (e.t === 'blast') { hitStop = 0.09; redA = 0.85; fx.addShake(1.2); sfx('grunt', { vol: 0.9 }); const L = t('blast'); say(L[run.sky.stats.hits % L.length], 1.6); fovKick = 9 }
   else if (e.t === 'faceplant') { sfx('bonk', { vol: 0.9, rate: 0.8 }); fx.dust(e.x, 0, e.z, 6, [0.5, 0.46, 0.42], 1) }
   else if (e.t === 'near') {
-    // ギリギリ回避: 一瞬スロー・光・視野が広がる・風を切る。つなぐほど派手に
-    slowT = e.src === 'big' ? 0.6 : 0.42; flashA = 0.9; fovKick = -10 - Math.min(6, e.chain * 1.5); hitStop = 0.03
+    // ギリギリ回避: ほんの一瞬だけ少し遅く（0.7倍・0.13秒）・光・視野が広がる・風を切る。止めない（v3 本人「止まる時間長い。もっと避けていく感じがほしい」。v2 は 0.3倍を 0.42秒＋0.03秒止め）
+    // つないでいる間はスローを入れず、光と加速と音だけで流す
+    if (e.chain <= 1) slowT = e.src === 'big' ? 0.16 : 0.13
+    flashA = Math.max(flashA, 0.55); fovKick = -6 - Math.min(5, e.chain * 1.2)
     if (me) { const k = 0.45; fx.sparks(me.x + (e.x - me.x) * k, me.y + 1, me.z + (e.z - me.z) * k, 18, null, 12); fx.dust(me.x + (e.x - me.x) * 0.6, 0, me.z + (e.z - me.z) * 0.6, 4, [0.55, 0.48, 0.4], 1.2) }   // 爆風がすぐ横を抜ける
     sfx('whoosh', { vol: 0.9, rate: 0.8 }); sfx('ding', { vol: 0.35 + Math.min(0.4, e.chain * 0.08), rate: 1 + Math.min(0.5, (e.chain - 1) * 0.08) })
     nearPop(e.src === 'big' ? t('nearBig') : e.src === 'roll' ? t('nearRoll') : t('near'), e.chain)
@@ -582,12 +675,100 @@ function onRunEvent(e) {
   else if (e.t === 'arrive') { sfx('ding', { vol: 0.9 }); say(e.late ? t('arriveLate') : t('arrive'), 2.2); flashA = 0.6; fovKick = -6 }
   else if (e.t === 'bossLand') { setTimeout(() => say(t('bossLand'), 2.6), 400); snapIn = 8; snapScore = 999 }
   else if (e.t === 'absent') say(t('absent'), 2)
+  else if (e.t === 'suit') {
+    // スーツが1段燃えた: 体の絵を替え、煙と火の粉。パンツ一丁になったら警察が追ってくる
+    if (model.setSuit) model.setSuit(e.n)
+    setSuitHud(e.n)
+    setTimeout(() => { if (mode === 'play') say(t('suitSay')[e.n], 1.8) }, 650)
+    fx.sparks(me.x, me.y + 1.1, me.z, 26, null, 9)
+    if (e.n >= 4) { document.body.classList.add('chased'); Snd.loop('siren', 'snd/siren.mp3', 0.22); setTimeout(() => { if (mode === 'play' && !run.arrest) say(t('police'), 2.6) }, 2600) }
+  }
+  else if (e.t === 'tailor') {
+    if (model.setSuit) model.setSuit(e.n)
+    setSuitHud(e.n); say(t('tailorSay'), 2.2); sfx('ding', { vol: 0.9 }); sfx('click', { vol: 0.6, delay: 0.1 }); flashA = 0.7
+    fx.sparks(me.x, me.y + 1, me.z, 20, null, 6)
+    if (e.n < 4) { document.body.classList.remove('chased'); Snd.loop('siren', 'snd/siren.mp3', 0.06) }
+  }
+  else if (e.t === 'arrest') {
+    // パンツ一丁で5回目: 警察に確保される（結果は「警察署からのお知らせ」）
+    if (model.setSuit) model.setSuit(4)
+    setSuitHud(5); document.body.classList.add('chased')
+    Snd.loop('siren', 'snd/siren.mp3', 0.4); Snd.loop('bgm', null)
+    startArrest()
+  }
   else if (e.t === 'end') showResult()
+}
+
+// ---------------------------------------------------------------- 確保の場面（v3）
+// パトカーが横から入ってきて止まり、警官が2人走ってきて両脇に立つ。自分は起き上がって両手を挙げる。カメラはゆっくり回る
+function startArrest() {
+  const a = Math.atan2(me.vx || Math.sin(me.yaw), me.vz || Math.cos(me.yaw)) + Math.PI / 2
+  police.st = { t: 0, a, said: false, said2: false, shot: false }
+  me.yaw = a + Math.PI   // パトカーに背を向けて、カメラの方を向く
+  police.car.group.visible = true
+  for (const o of police.offs) o.group.visible = true
+  $('touch').classList.add('hidden')
+  police.st.px = me.x + Math.sin(a) * 7; police.st.pz = me.z + Math.cos(a) * 7   // パトカーが止まる所（その近くの車は描かない）
+}
+function arrestTick(dt) {
+  const P = police.st; if (!P || !me) return
+  P.t += dt
+  const fx_ = Math.sin(P.a), fz_ = Math.cos(P.a)
+  // パトカー: 自分の横 7m の所へ、45m 先から 1.4 秒で滑り込む
+  const k = Math.min(1, P.t / 1.4), ease = 1 - Math.pow(1 - k, 3), dd = 7 + (1 - ease) * 38
+  const cx = me.x + fx_ * dd, cz = me.z + fz_ * dd, cy = world.groundAt(cx, cz, me.y + 2).h
+  police.car.update({ x: cx, y: cy, z: cz, yaw: P.a + Math.PI / 2, pitch: 0, roll: 0, vx: (1 - k) * 25 * -fx_, vz: (1 - k) * 25 * -fz_, grounded: true }, dt, { braking: k < 1 })
+  police.red.emissiveIntensity = Math.floor(P.t * 6) % 2 ? 3 : 0.3
+  // 警官: 車から走ってきて、自分の左右 1.1m に立つ
+  police.offs.forEach((o, i) => {
+    const side = i ? 1 : -1, k2 = Math.max(0, Math.min(1, (P.t - 1.5) / 1.3))
+    const sx = cx - fz_ * side * 1.2, sz = cz + fx_ * side * 1.2
+    const tx = me.x + Math.cos(P.a) * side * 1.15, tz = me.z - Math.sin(P.a) * side * 1.15
+    const x = sx + (tx - sx) * k2, z = sz + (tz - sz) * k2
+    o.group.position.set(x, world.groundAt(x, z, me.y + 2).h, z)
+    o.group.rotation.y = k2 < 1 ? Math.atan2(tx - sx, tz - sz) : Math.atan2(me.x - x, me.z - z)
+    o.group.visible = P.t > 1.4
+    o.update(dt, k2 > 0 && k2 < 1)
+  })
+  if (model) model.handsUp = P.t > 2.4 && me.grounded && !(me.wreck > 0)
+  if (P.t > 2.4) { me.yaw = P.a + Math.PI; me.stun = 0 }
+  window.__arrestDbg = { t: P.t, hands: model && model.handsUp, wreck: me.wreck, g: me.grounded }
+  if (P.t > 2.4 && me.wreck > 0) me.wreck = 0   // 倒れていても、警官が来たら起き上がる
+  if (!P.said && P.t > 2.5) { P.said = true; say(t('arrestSay'), 1.6); sfx('ding', { vol: 0.4, rate: 0.6 }); fx.addShake(0.3) }
+  if (!P.said2 && P.t > 3.9) { P.said2 = true; say(t('arrestSay2'), 1.6) }
+  if (!P.shot && P.t > 3.6) { P.shot = true; photo = arrestShot(); photoScore = 1e9 }
+}
+// 確保の間のカメラ: パトカーと反対側の斜め上から、自分・警官・パトカーが1枚に入るように。ゆっくり横へ回る
+function arrestCamera(dt) {
+  const P = police.st, a = P.a + Math.PI + 0.55 + P.t * 0.06
+  const lx = me.x + Math.sin(P.a) * 2.6, lz = me.z + Math.cos(P.a) * 2.6
+  _w.set(me.x + Math.sin(a) * 6, me.y + 3, me.z + Math.cos(a) * 6)
+  if (!P.cam) P.cam = camera.position.clone()
+  P.cam.lerp(_w, 1 - Math.exp(-dt * 3))
+  camera.position.copy(P.cam)
+  if (fx.shake > 0) camera.position.add(_v.set((Math.random() - 0.5) * fx.shake, (Math.random() - 0.5) * fx.shake * 0.7, (Math.random() - 0.5) * fx.shake))
+  camera.lookAt(lx, me.y + 1.0, lz)
+  const asp = camera.aspect, base = asp >= 1 ? 55 : Math.min(80, 2 * Math.atan(Math.tan(THREE.MathUtils.degToRad(33)) / asp) * 180 / Math.PI)
+  camera.fov = base; camera.updateProjectionMatrix()
+}
+// 確保の写真（結果の紙）: 斜め上から、自分と警官とパトカーが入るように
+function arrestShot() {
+  const c2 = document.createElement('canvas'); c2.width = 720; c2.height = 450
+  const P = police.st, a = P.a + 0.9
+  newsCam.aspect = 720 / 450; newsCam.updateProjectionMatrix()
+  newsCam.position.set(me.x - Math.sin(a) * 9.5, me.y + 4.2, me.z - Math.cos(a) * 9.5)
+  newsCam.lookAt(me.x + Math.sin(P.a) * 2.5, me.y + 1.1, me.z + Math.cos(P.a) * 2.5)
+  const sz = renderer.getSize(new THREE.Vector2())
+  renderer.setSize(720, 450, false); renderer.render(scene, newsCam)
+  c2.getContext('2d').drawImage(renderer.domElement, 0, 0, 720, 450)
+  renderer.setSize(sz.x, sz.y, false); renderer.render(scene, camera)
+  return c2
 }
 
 // ---------------------------------------------------------------- 結果
 function showResult() {
   mode = 'result'
+  document.body.classList.remove('chased'); if (model) model.handsUp = false
   Snd.loop('wind', null); Snd.loop('bgm', null); Snd.loop('heli', null); Snd.loop('crowd', null)
   const v = verdict(run), L = T[lang], ja = lang === 'ja'
   const st = v.pardon && v.status !== 'dayoff' ? 'pardon' : v.status
@@ -598,6 +779,7 @@ function showResult() {
   const late = v.status === 'late' || v.status === 'verylate'
   const arrive = v.status === 'dayoff' ? (ja ? '休み' : 'Off') : v.arr == null ? (ja ? '来ず' : '—') : fmtClock(v.arr)
   const sub = v.status === 'early' ? L.sub.early(Math.floor((DEADLINE - v.arr) / 60)) : v.status === 'ontime' ? L.sub.ontime() : late ? L.sub[v.status](v.lateMin) : ''
+  if (v.status === 'arrest') return showArrestResult(v, L, ja)
   const d = {
     title: L.titles[v.status], titleColor: late || v.status === 'absent' ? '#c8321e' : '#1b2233',
     lab: { ...L.lab, reason: late || v.status === 'absent' ? L.lab.reason : L.lab.reasonOk }, date: `${d0.getFullYear()}.${String(d0.getMonth() + 1).padStart(2, '0')}.${String(d0.getDate()).padStart(2, '0')}`, name: L.you,
@@ -619,6 +801,26 @@ function showResult() {
   window.__lastVerdict = { ...v, stamp: L.stamps[st], title: L.titles[v.status], comment }
   if (window.TM) TM.end(v.score, good)
 }
+function showArrestResult(v, L, ja) {
+  const d0 = new Date(), A = v.arrest
+  const d = {
+    title: L.arrestTitle, titleColor: '#1d4f9c',
+    lab: { ...L.lab, arrive: L.arrestLab, reason: L.lab.reason }, date: `${d0.getFullYear()}.${String(d0.getMonth() + 1).padStart(2, '0')}.${String(d0.getDate()).padStart(2, '0')}`, name: L.you,
+    photo: photo || newsShot(null), caption: L.arrestCaption, arrive: fmtClock(A.clock), sub: L.arrestPlace[A.z < 300 ? 0 : A.z < 548 ? 1 : A.z < 700 ? 2 : A.z < 845 ? 3 : A.z < 1405 ? 4 : 5] || '', late: true,
+    reasons: [{ text: L.arrestReasons[0], n: 0 }, { text: L.arrestReasons[1](v.hits), n: 0 }, { text: L.arrestReasons[2], n: 0 }],
+    stats: [[L.statL[0], String(v.near), false, L.unit[0]], [L.statL[1], String(v.bestChain), false, L.unit[1]], [L.statL3, String(v.hits), true, L.unit[2]]],
+    comment: L.arrestComment, stamp: L.arrestStamp, stampColor: '#1d4f9c', footer: 'tom3games.github.io/meteor-commute'
+  }
+  drawCard($('slip'), d)
+  if (document.fonts && document.fonts.status !== 'loaded') document.fonts.ready.then(() => mode === 'result' && drawCard($('slip'), d))
+  sfx('lose', { vol: 0.8 })
+  const head = `${L.arrestTitle}「${L.arrestStamp}」 ${d.arrive}`
+  $('btnPost').href = 'https://twitter.com/intent/tweet?text=' + encodeURIComponent(L.postText(v, head)) + '&url=' + encodeURIComponent(URL_) + '&hashtags=' + encodeURIComponent(ja ? '隕石の日でも出社する' : 'MeteorCommute')
+  $('touch').classList.add('hidden')
+  show('result')
+  window.__lastVerdict = { ...v, stamp: L.arrestStamp, title: L.arrestTitle, comment: L.arrestComment }
+  if (window.TM) TM.end(0, false)
+}
 $('btnPost').addEventListener('click', () => { if (window.TM) TM.share('x') })
 $('btnSave').onclick = () => { if (window.TM) TM.share('save'); $('slip').toBlob(b => { const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = 'meteor-commute.png'; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 4000) }) }
 $('btnStart').onclick = () => startRun()
@@ -636,6 +838,7 @@ $('btnQuit').onclick = () => { setPause(false); toTitle() }
 const lerpAngle = (a, b, k) => { let d = b - a; while (d > Math.PI) d -= Math.PI * 2; while (d < -Math.PI) d += Math.PI * 2; return a + d * k }
 function updateCamera(dt, c) {
   if (window.__freeze) return
+  if (police.st && mode === 'play' && me && c === me) { arrestCamera(dt); return }
   const pos = model.group.position
   const v = Math.hypot(c.vx, c.vz)
   let hx = Math.sin(c.yaw), hz = Math.cos(c.yaw)
@@ -684,7 +887,8 @@ addEventListener('resize', resize); resize()
 let last = performance.now(), acc = 0, frameN = 0
 function stepOnce() {
   if (mode === 'play' && !paused && me && !run.over) {
-    const inp = autoBot ? botInput(autoBot, me, run, world, STEP) : gather()   // autoBot: 撮影と検証で CPU に操作させる
+    let inp = autoBot ? botInput(autoBot, me, run, world, STEP) : gather()   // autoBot: 撮影と検証で CPU に操作させる
+    if (run.arrest) { inp = { throttle: 0, steer: 0 }; if (me.grounded && !(me.wreck > 0)) { me.vx *= 0.8; me.vz *= 0.8 } }   // 確保: 操作できない
     me.events.length = 0
     street.update(STEP, me)
     stepRunner(me, inp, STEP, world)
@@ -713,7 +917,7 @@ function frame() {
   let dt = Math.min(0.1, (now - last) / 1000); last = now
   // ギリギリ回避のスロー（実時間で数える）
   let scale = 1
-  if (slowT > 0) { slowT -= dt; scale = 0.3 }
+  if (slowT > 0) { slowT -= dt; scale = 0.7 }
   if (hitStop > 0) { hitStop -= dt; acc = 0 }
   else if (!dbgPause && !paused) { acc += dt * scale; let n = 0; while (acc >= STEP && n < 6) { stepOnce(); acc -= STEP; n++ } if (n >= 6) acc = 0 }
   render(dbgPause ? 0 : dt * scale || 0.016)
@@ -785,7 +989,8 @@ function render(dt) {
   drawSpeed(mode === 'play' && me ? Math.hypot(me.vx, me.vy, me.vz) : 0, dt)
   heli.update(dt, c, !!c && (mode === 'title' || (run && run.t > 8)))
   if (mode === 'play' && run && !heliSaid && run.t > 9) { heliSaid = true; if (!(sayT > 0)) say(t('heli'), 2.2) }
-  carsDraw.draw(street.traffic.cars, camera.position, dt); pedsDraw.draw(street.peds, camera.position, dt)
+  const P_ = police.st, carList = P_ && mode === 'play' ? street.traffic.cars.filter(c => Math.hypot(c.x - P_.px, c.z - P_.pz) > 9 && Math.hypot(c.x - me.x, c.z - me.z) > 5) : street.traffic.cars
+  carsDraw.draw(carList, camera.position, dt); pedsDraw.draw(street.peds, camera.position, dt)
   applyDayTime(R0 ? Math.min(1, R0.t / 150) : 0)
   skyTint.position.copy(camera.position)
   fx.update(dt)
@@ -794,7 +999,18 @@ function render(dt) {
     if (hintAt > 0 && !paused) { hintAt -= dt; if (hintAt <= 0 && tut && me.swings === 0) say(touchMode ? t('hint1') : t('hint1Pc'), 3) }
     updateHud(dt)
     senpaiTick(dt)
+    arrestTick(dt)
+    // 焦げたスーツから細い煙（段が進むほど濃い。パンツ一丁は燃える物が無い）
+    if (run.suit > 0 && run.suit < 4 && frameN % (6 - run.suit) === 0) fx.smoke(me.x, me.y + 1.3, me.z, { dark: 0.45, size: 0.5 + run.suit * 0.25, life: 0.9, vy: 1.2, a: 0.35 })
   }
+  // 紳士服の店の輪: 使ったら消える。浮いたハンガーが回る
+  tailorRings.forEach((q, i) => {
+    const used = mode === 'play' && run && run.tailorUsed[i]
+    q.g.visible = !used && !(mode === 'play' && run && run.suit === 0 && run.t < 1)
+    q.hanger.rotation.y += dt * 1.6; q.hanger.position.y = 2.4 + Math.sin(k6 / 300 + i) * 0.15
+    q.ring.material.opacity = 0.55 + Math.sin(k6 / 200) * 0.3
+  })
+  if (frameN % 9 === 0) fx.smoke(-35.8, 28.4, 1215.7, { dark: 0.15, size: 3, life: 3.4, vy: 2.2, a: 0.35 })   // 銭湯の煙突
   renderer.render(scene, camera)
   // 明細の写真: 近くに落ちた・ギリギリでよけた瞬間の少し後（爆発が写る）
   if (snapIn >= 0) { if (snapIn-- === 0 && snapScore > photoScore) { photoScore = snapScore; photo = newsShot(snapAt) } }
@@ -873,7 +1089,9 @@ window.meteor = {
     // 画面の座標（本物の指で押すテスト用）
     screenOf: (x, y, z) => { _v.set(x, y, z).project(camera); return { x: (_v.x + 1) / 2 * innerWidth, y: (1 - _v.y) / 2 * innerHeight, front: _v.z < 1 } },
     setTime: s => { run.t = s },
-    autoBot: (kind, seed = 1) => { autoBot = kind ? createBot(kind, seed) : null }
+    autoBot: (kind, seed = 1) => { autoBot = kind ? createBot(kind, seed) : null },
+    burn: (n = 1) => { run.sky.stats.hits += n },   // 当たったことにする（スーツの段と確保の検証）
+    police, get model() { return model }, scene, raycaster: new THREE.Raycaster(), vec: (x, y, z) => new THREE.Vector3(x, y, z)
   }
 }
 applyLang()

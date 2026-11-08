@@ -135,3 +135,27 @@ button,a{font:inherit;color:inherit;background:none;border:0;cursor:pointer;touc
   .memo ol{font-size:14px;gap:7px}.memo h2{font-size:19px;margin-bottom:8px}
 }
 @media (max-width:370px){ .tbtn[data-k=jump]{right:max(130px,calc(env(safe-area-inset-right) + 130px));width:70px} }
+
+/* v3: スーツの燃え具合（腕時計の横の小さな絵）。0 スーツ → 1 焦げ → 2 上着なし → 3 シャツも焼けた → 4 パンツ一丁 → 5 確保 */
+.suit{width:30px;height:36px;flex:none;margin-left:2px;filter:drop-shadow(0 1px 2px rgba(0,0,0,.5))}
+.suit path,.suit g{display:none}
+.suit .skin{fill:#f2bf98;stroke:#1b2233;stroke-width:1.4}
+.suit .shirt{fill:#f4f2ec;stroke:#1b2233;stroke-width:1.4}
+.suit .rag{fill:#ece9e2;stroke:#1b2233;stroke-width:1}
+.suit .jacket{fill:#3b4252;stroke:#1b2233;stroke-width:1.4}
+.suit .lapel{fill:#f4f2ec}
+.suit .tie{fill:#d23a2a}
+.suit .soot{fill:#120e0c;opacity:.85}
+.suit .briefs{fill:#f4f6fa;stroke:#3a6fd0;stroke-width:1.6}
+.suit.s0 .skin,.suit.s0 .jacket,.suit.s0 .lapel,.suit.s0 .tie{display:inline}
+.suit.s1 .skin,.suit.s1 .jacket,.suit.s1 .lapel,.suit.s1 .tie,.suit.s1 .soot{display:inline}
+.suit.s2 .shirt,.suit.s2 .tie,.suit.s2 .soot{display:inline}
+.suit.s3 .skin,.suit.s3 .rag,.suit.s3 .tie{display:inline}
+.suit.s4 .skin,.suit.s4 .tie,.suit.s4 .briefs,.suit.s5 .skin,.suit.s5 .tie,.suit.s5 .briefs{display:inline}
+.suit.s4,.suit.s5{animation:blink .5s steps(2) infinite}
+.suit.pop{animation:suitPop .5s ease-out}
+.suit.s4.pop,.suit.s5.pop{animation:suitPop .5s ease-out,blink .5s steps(2) .5s infinite}
+@keyframes suitPop{0%{transform:scale(1.9) rotate(-8deg)}60%{transform:scale(.9)}100%{transform:scale(1)}}
+/* パンツ一丁: 画面のふちに赤と青の回転灯の光 */
+body.chased #redflash{opacity:1!important;background:radial-gradient(ellipse at center,rgba(0,0,0,0) 55%,rgba(220,40,30,.35) 100%);animation:patrol .7s steps(2) infinite}
+@keyframes patrol{50%{background:radial-gradient(ellipse at center,rgba(0,0,0,0) 55%,rgba(40,90,230,.35) 100%)}}

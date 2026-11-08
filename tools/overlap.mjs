@@ -1,5 +1,5 @@
 // 地図の箱どうしが重なっていないか（3D）。node tools/overlap.mjs
-import { commuteWorld } from '../shared/commute.js?v=2'
+import { commuteWorld } from '../shared/commute.js?v=3'
 const w = commuteWorld()
 const C = w.colliders.filter(o => !o.slab && o.y1 != null && o.kind !== 'rail' && o.kind !== 'bound')
 const allow = (a, b) => [a.look, b.look].includes('screen') || (a.look === 'jib' || b.look === 'jib') && (a.look === 'mast' || b.look === 'mast')
@@ -18,7 +18,7 @@ for (const o of C) {
     const t = Math.max(0, Math.min(L, (o.cx - s.ax) * ux + (o.cz - s.az) * uz)), px = s.ax + ux * t, pz = s.az + uz * t
     const ex = Math.abs(o.cx - px) - o.hw, ez = Math.abs(o.cz - pz) - o.hl
     const inside = (Math.abs(ux) > 0.5 ? ez < s.hw - 0.3 && Math.abs(o.cx - px) < o.hw - 0.3 : ex < s.hw - 0.3 && Math.abs(o.cz - pz) < o.hl - 0.3)
-    if (inside && t > 1 && t < L - 1 && Math.abs(o.cx) < 220 && o.cz > -50 && o.cz < 1250) { r++; if (r < 20) console.log('道の上', o.kind, o.look || '', o.cx.toFixed(1), o.cz.toFixed(1)) }
+    if (inside && t > 1 && t < L - 1 && Math.abs(o.cx) < 220 && o.cz > -50 && o.cz < 1810) { r++; if (r < 20) console.log('道の上', o.kind, o.look || '', o.cx.toFixed(1), o.cz.toFixed(1)) }
   }
 }
 console.log('重なり', n, '道の上', r, '箱', C.length)

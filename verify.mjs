@@ -5,8 +5,8 @@ import { spawn, execFileSync } from 'node:child_process'
 import { mkdirSync, readFileSync } from 'node:fs'
 import { MUTE_LAUNCH, muteContext } from './mute.mjs'
 import { createRunner, stepRunner, RUN, rayHit, findAnchor } from './shared/runner.js?v=16'
-import { SKY, createSky, stepSky, dropAt } from './shared/meteor.js?v=2'
-import { COM, DEADLINE, createRun, stepRun, verdict, clockSec, commuteWorld } from './shared/commute.js?v=2'
+import { SKY, createSky, stepSky, dropAt } from './shared/meteor.js?v=3'
+import { COM, DEADLINE, createRun, stepRun, verdict, clockSec, commuteWorld } from './shared/commute.js?v=3'
 import { sweep } from './tools/reach.mjs'
 import { play } from './tools/sim.mjs'
 const ROOT = import.meta.dirname
@@ -37,8 +37,8 @@ await t('ワイヤー: 75m 以内に掛かる・スイングは走るより速�
   const a = go(false), b = go(true); expect(b > a * 1.4, JSON.stringify({ a, b })); return { run: Math.round(a), swing: Math.round(b) }
 })
 await t('クレーンの腕（高さ 56m）: 空中から腕を狙うと掛かり、大通りの上まで大きく振れる', () => {
-  const jib = world.colliders.find(o => o.look === 'jib'), r = runner(-30, 950); r.y = 28; r.grounded = false
-  const L = Math.hypot(0, 57 - 29.5, 999.5 - 950), h = rayHit(world, -30, 29.5, 950, 0, (57 - 29.5) / L, (999.5 - 950) / L, 80)
+  const jib = world.colliders.find(o => o.look === 'jib'), Z0 = jib.cz - 49.5, r = runner(-30, Z0); r.y = 28; r.grounded = false   // v3: オフィス街は 560m 北へ
+  const L = Math.hypot(0, 57 - 29.5, jib.cz - Z0), h = rayHit(world, -30, 29.5, Z0, 0, (57 - 29.5) / L, (jib.cz - Z0) / L, 80)
   stepRunner(r, { wire: true, wireAt: h }, dt, world)
   const on = !!r.rope && Math.abs(r.rope.y - 56) < 1.5
   let maxX = r.x; for (let i = 0; i < 60 * 3 && r.rope; i++) { stepRunner(r, { throttle: 1, moveDir: { x: 1, z: 0.2 } }, dt, world); maxX = Math.max(maxX, r.x) }
@@ -114,14 +114,14 @@ await t('転がる隕石: 道に沿って転がり、当たると飛ばされる
   for (let i = 0; i < 60 * 8; i++) { stepRunner(r, {}, dt, world); stepSky(sky, r, dt, { spawn: false }); for (const e of sky.events) { if (e.t === 'rollHit') hit = true; if (e.t === 'rollStop') stop = true } sky.events.length = 0 }
   expect(hit && stop && sky.stats.rollHits === 1 && !sky.rollers.length, JSON.stringify({ hit, stop })); return true
 })
-await t('狙い: 4〜7割は自分の少し先（まっすぐ走り続けると当たる所）、ほかは行く道の先と近く。だんだん間隔が短くなる', () => {
+await t('狙い（v3 で散らした）: 1.5〜4.5割が自分の少し先、ほかは行く道の先と近く。だんだん間隔が短くなる', () => {
   const sky = createSky(world, 7), r = runner(0, 700); r.vz = 10
   sky.goal = COM.office
   const pts = []
   for (let i = 0; i < 60 * 200; i++) { stepSky(sky, r, dt); for (const e of sky.events) if (e.t === 'warn' && !sky.falling.find(m => m.id === e.id).shower) pts.push({ t: sky.t, d: Math.hypot(e.x - (r.x + r.vx * SKY.warn * SKY.lead), e.z - (r.z + r.vz * SKY.warn * SKY.lead)) }); sky.events.length = 0; sky.falling.length = 0 }
   const lead = pts.filter(p => p.d < 9).length / pts.length
   const early = pts.filter(p => p.t < 40).length / 40, late = pts.filter(p => p.t > 150).length / 50
-  expect(lead > 0.35 && lead < 0.7 && late > early * 1.3, JSON.stringify({ lead, early, late })); return { lead: +lead.toFixed(2), perSecEarly: +early.toFixed(2), perSecLate: +late.toFixed(2) }
+  expect(lead > 0.15 && lead < 0.45 && late > early * 1.3, JSON.stringify({ lead, early, late })); return { lead: +lead.toFixed(2), perSecEarly: +early.toFixed(2), perSecLate: +late.toFixed(2) }
 })
 await t('時計: 8:47 に家を出て 9:00 は 139秒後。駅（電車は止まっている）を通ってから会社。駅より先に会社へ行っても着いたことにならない', () => {
   const run = createRun(world, 1, { rare: 'none' })
@@ -138,21 +138,50 @@ await t('判定: 早出（3分前より前）・定時・遅刻（5分まで）�
   const r = { early: mk(DEADLINE - 200), ontime: mk(DEADLINE - 10), late: mk(DEADLINE + 120), verylate: mk(DEADLINE + 400), absent: mk(null) }
   expect(Object.entries(r).every(([k, v]) => k === v), JSON.stringify(r)); return r
 })
+await t('v3 スーツ: 当たるたびに1段燃える（焦げ → 上着 → シャツ → パンツ一丁）→ 5回目で確保（5.2秒後に終わり・判定は確保）。紳士服の店の輪で1段戻る（店ごとに1回）', () => {
+  const run = createRun(world, 5, { rare: 'none' }), r = runner(0, 330), seen = []
+  for (let k = 1; k <= 4; k++) { run.sky.stats.hits = k; stepRun(run, r, dt, { spawn: false }); seen.push(run.suit) }
+  const T = COM.tailors[0]; r.x = T.x; r.z = T.z; stepRun(run, r, dt, { spawn: false }); const fixed = run.suit
+  stepRun(run, r, dt, { spawn: false }); const once = run.suit
+  run.sky.stats.hits = 5; stepRun(run, r, dt, { spawn: false }); const s5 = run.suit
+  run.sky.stats.hits = 6; stepRun(run, r, dt, { spawn: false })
+  const ar = !!run.arrest; let n = 0; while (!run.over && n < 600) { stepRun(run, r, dt, { spawn: false }); n++ }
+  const v = verdict(run)
+  expect(seen.join() === '1,2,3,4' && fixed === 3 && once === 3 && s5 === 4 && ar && run.over && v.status === 'arrest' && Math.abs(n * dt - (COM.arrestSec - dt)) < 0.1, JSON.stringify({ seen, fixed, once, s5, ar, n, v: v.status }))
+  return { stages: seen, tailor: '4→3', arrestAfter: +(n * dt).toFixed(1) }
+})
+await t('v3 屋根: 一軒家・お社の切妻屋根は、落ちて乗っても・軒から棟へ歩いて登っても、足が見た目の屋根の面（軒の出 0.6m・厚み 0.08m）から 5cm 以内', async () => {
+  const { topAt } = await import('./shared/runner.js?v=16')
+  const out = []
+  for (const o of [world.colliders.find(o => o.gable && o.ridgeX && o.fill), world.colliders.find(o => o.gable && !o.ridgeX && o.fill), world.colliders.find(o => o.look === 'hall')]) {
+    const r = runner(o.cx, o.cz); r.y = o.y1 + o.gable + 4; r.grounded = false
+    for (let i = 0; i < 200 && !r.grounded; i++) stepRunner(r, {}, dt, world)
+    const drop = Math.abs(r.y - topAt(o, r.x, r.z))
+    // 軒先から棟へ歩く（棟と直角の向き）
+    const along = o.ridgeX ? { x: 0, z: 1 } : { x: 1, z: 0 }, run0 = (o.ridgeX ? o.hl : o.hw) + 0.4
+    const q = runner(o.cx - along.x * run0, o.cz - along.z * run0); q.y = topAt(o, q.x, q.z); q.grounded = true
+    let worst = 0
+    for (let i = 0; i < 90; i++) { stepRunner(q, { throttle: 1, moveDir: along }, dt, world); const tp = topAt(o, q.x, q.z); if (tp != null && q.grounded) worst = Math.max(worst, tp - q.y) }
+    out.push({ drop: +(drop * 100).toFixed(1), sinkWalk: +(worst * 100).toFixed(1) })
+  }
+  expect(out.every(o => o.drop <= 5 && o.sinkWalk <= 5), JSON.stringify(out)); return out
+})
 await t('同じ種なら同じ展開（着いた時刻・当たった数が同じ）・種が違えば違う', () => {
   const a = play('skilled', 11, { rare: 'none' }), b = play('skilled', 11, { rare: 'none' }), c = play('skilled', 12, { rare: 'none' })
   expect(a.arr === b.arr && a.hits === b.hits && (c.arr !== a.arr || c.hits !== a.hits), JSON.stringify([a.arr, b.arr, c.arr])); return { a: a.arr, c: c.arr }
 })
 const SIM = {}
-await t('bot（10回ずつ）: 何もしないと全部欠勤（最低）／上手い人は5〜8割が定時／下手な人・走るだけ・よけない人より上手い人の方が定時が多い／よけない人は当たる回数が2倍以上', () => {
-  for (const k of ['skilled', 'clumsy', 'runner', 'blind', 'idle']) { const rs = []; for (let s = 1; s <= 10; s++) rs.push(play(k, s, { rare: 'none' })); SIM[k] = { on: rs.filter(r => r.status === 'early' || r.status === 'ontime').length, absent: rs.filter(r => r.status === 'absent').length, hits: rs.reduce((a, r) => a + r.hits, 0) / 10, near: rs.reduce((a, r) => a + r.near, 0) / 10 } }
+await t('bot（10回ずつ）: 何もしないと全部が確保か欠勤（最低）／上手い人は5〜9割が定時で確保は2回まで／下手な人は半分以上が確保／上手い人の方が定時が多い／よけない人は当たる回数が1.3倍以上', () => {
+  for (const k of ['skilled', 'clumsy', 'runner', 'blind', 'idle']) { const rs = []; for (let s = 1; s <= 10; s++) rs.push(play(k, s, { rare: 'none' })); SIM[k] = { on: rs.filter(r => r.status === 'early' || r.status === 'ontime').length, absent: rs.filter(r => r.status === 'absent').length, arrest: rs.filter(r => r.status === 'arrest').length, hits: rs.reduce((a, r) => a + r.hits, 0) / 10, near: rs.reduce((a, r) => a + r.near, 0) / 10 } }
   const S = SIM
-  expect(S.idle.absent === 10 && S.skilled.on >= 5 && S.skilled.on <= 8 && S.skilled.on > S.clumsy.on && S.skilled.on > S.runner.on && S.skilled.on > S.blind.on && S.blind.hits >= S.skilled.hits * 2, JSON.stringify(S))
-  return Object.fromEntries(Object.entries(S).map(([k, v]) => [k, `定時${v.on}/10 欠勤${v.absent} 当${v.hits.toFixed(1)} ギリ${v.near.toFixed(1)}`]))
+  expect(S.idle.absent + S.idle.arrest === 10 && S.skilled.on >= 5 && S.skilled.on <= 9 && S.skilled.arrest <= 2 && S.clumsy.arrest >= 5 && S.skilled.on > S.clumsy.on && S.skilled.on > S.runner.on && S.skilled.on > S.blind.on && S.blind.hits >= S.skilled.hits * 1.3, JSON.stringify(S))
+  return Object.fromEntries(Object.entries(S).map(([k, v]) => [k, `定時${v.on}/10 欠勤${v.absent} 確保${v.arrest} 当${v.hits.toFixed(1)} ギリ${v.near.toFixed(1)}`]))
 })
 await t('珍しい出来事: 会社に隕石（約4%）→ 臨時休業「休業」／部長が隕石で出社（約6%）→ 遅れても不問', () => {
   const cnt = { officeHit: 0, bossRide: 0 }
   for (let s = 1; s <= 3000; s++) { const r = createRun(world, s); if (r.rare) cnt[r.rare]++ }
-  const a = play('skilled', 3, { rare: 'officeHit' }), b = play('blind', 4, { rare: 'bossRide' })
+  let a = null; for (let sd = 3; sd < 14 && (!a || a.status === 'arrest'); sd++) a = play('skilled', sd, { rare: 'officeHit' })   // v3: 途中で確保された種は飛ばす
+  let b = null; for (let sd = 4; sd < 16 && (!b || b.status === 'arrest'); sd++) b = play('skilled', sd, { rare: 'bossRide' })
   expect(cnt.officeHit > 75 && cnt.officeHit < 180 && cnt.bossRide > 120 && cnt.bossRide < 260 && a.status === 'dayoff' && a.pardon && b.arr != null && b.pardon, JSON.stringify({ cnt, a: a.status, b: [b.status, b.pardon] }))
   return { per3000: cnt, office: a.status, boss: b.pardon }
 })
@@ -340,7 +369,7 @@ await t('真上に隕石: 赤い輪（半径8m）と影が出て、影はだん�
   })
   expect(r.mk && r.s2 > r.s1 * 1.8 && r.o2 > r.o1 && Math.abs(r.ring - 8) < 0.01 && r.hits === 1 && r.red > 0.3, JSON.stringify(r)); return r
 })
-await t('ギリギリ回避: 輪のすぐ外で落ちると、一瞬スロー（0.3倍）・光・「ギリギリ！」・「2連続」が出る', async () => {
+await t('ギリギリ回避（v3 で軽く）: 輪のすぐ外で落ちると、ほんの一瞬（0.16秒以下）だけ 0.7倍・止めない・光・「ギリギリ！」・「2連続」が出る', async () => {
   await p.waitForTimeout(2800)
   const r = await p.evaluate(() => {
     const M = meteor; M.dbg.pause(true); M.dbg.teleport(M.COM.home.x, 0, M.COM.home.z, Math.PI / 2)
@@ -348,10 +377,10 @@ await t('ギリギリ回避: 輪のすぐ外で落ちると、一瞬スロー（
     M.dbg.teleport(M.COM.home.x, 0, M.COM.home.z, Math.PI / 2)
     const b = M.dbg.drop(-(M.SKY.r + 2.5), 0); b.warn = b.tLeft = 0.05; M.dbg.step(4)
     const near = !document.getElementById('near').classList.contains('hidden'), txt = document.getElementById('nearTxt').textContent, n = document.getElementById('nearN').textContent
-    return { near, txt, n, slow: M.slowT, flash: M.flashA, stats: M.run.sky.stats.near }
+    return { near, txt, n, slow: M.slowT, stop: M.hitStop, flash: M.flashA, stats: M.run.sky.stats.near }
   })
   await p.evaluate(() => meteor.dbg.pause(false))
-  expect(r.near && r.txt === 'ギリギリ！' && r.n === '2連続' && r.slow > 0.2 && r.flash > 0.5 && r.stats === 2, JSON.stringify(r)); return r
+  expect(r.near && r.txt === 'ギリギリ！' && r.n === '2連続' && r.slow <= 0.16 && !(r.stop > 0) && r.flash > 0.4 && r.stats === 2, JSON.stringify(r)); return r
 })
 await t('後ろに落ちてくる隕石は、画面のふちの赤い印で知らせる', async () => {
   const r = await p.evaluate(() => {
@@ -390,13 +419,13 @@ await t('通しの遊び（CPU に操作させて家 → 駅 → 会社）: 駅�
   await p.screenshot({ path: ROOT + '/shots/v_result.png' })
   expect(r.mode === 'result' && r.ev.includes('station') && r.ev.includes('arrive') && r.v && ['早出', '受理', '却下'].includes(r.v.stamp) && ui.again && ui.save && /intent\/tweet/.test(ui.post) && ui.support === '作者に缶コーヒーをおごる' && ui.slip === 1080, JSON.stringify({ r, ui })); return { status: r.v.status, stamp: r.v.stamp, near: r.v.near, hits: r.v.hits }
 })
-await t('何もしない出社は最低の判定（9:12 で打ち切り・欠勤届・「欠勤」の判子）', async () => {
+await t('何もしない出社は最低の判定（隕石でスーツが燃え尽きてパンツ一丁 → 警察に確保・「警察署からのお知らせ」「保護」）', async () => {
   const r = await p.evaluate(() => {
     const M = meteor; M.start(22, { rare: 'none' }); M.dbg.pause(true)
     let n = 0; while (!M.run.over && n < 60 * 300) { M.dbg.step(30); n += 30 }
     M.dbg.pause(false); return { v: window.__lastVerdict, t: M.run.t }
   })
-  expect(r.v.status === 'absent' && r.v.stamp === '欠勤' && r.v.title === '欠勤届' && Math.abs(r.t - 267.9) < 3, JSON.stringify(r)); return { t: Math.round(r.t), hits: r.v.hits }
+  expect(r.v.status === 'arrest' && r.v.stamp === '保護' && r.v.title === '警察署からのお知らせ' && r.v.hits >= 5, JSON.stringify(r)); return { t: Math.round(r.t), hits: r.v.hits }
 })
 await t('珍しい出来事の画面: 会社に隕石 → 臨時休業のお知らせ（休業）', async () => {
   const r = await p.evaluate(() => {

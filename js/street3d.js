@@ -3,7 +3,7 @@
 import * as THREE from 'three'
 import { clone as skClone } from '../vendor/jsm/utils/SkeletonUtils.js?v=16'
 import { ProcCar } from './carmodel.js?v=16'
-import { charAssets } from './charmodel.js?v=16'
+import { charAssets } from './charmodel.js?v=17'
 import { HOUSE, APT, VEND } from '../shared/town.js?v=16'
 import { Builder } from './geo.js?v=16'
 
@@ -96,7 +96,7 @@ function addApartment(b, lit, a, i) {
   const f = frame(a.cx, a.y0, a.cz, a.fx, a.fz)
   const W = APT.hw * 2, D = APT.hl * 2, H = APT.h, fl = H / APT.floors, wall = APT_WALLS[i % APT_WALLS.length]
   addBoxAt(b, f, 0, H / 2, 0, W / 2, H / 2, D / 2, wall)
-  addBoxAt(b, f, 0, H + 0.2, 0, W / 2 + 0.1, 0.2, D / 2 + 0.1, 0x6b6e70)            // 屋上の縁
+  addBoxAt(b, f, 0, H - 0.18, 0, W / 2 + 0.1, 0.2, D / 2 + 0.1, 0x6b6e70)           // 屋上の縁（v3: 上の面を当たりの高さにそろえる）
   addBoxAt(b, f, W / 4, H + 1, -1, 1.1, 0.8, 1.1, 0x9a9c9e)                          // 貯水槽
   for (let k = 0; k < APT.floors; k++) {
     const y = k * fl

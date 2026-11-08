@@ -1,6 +1,6 @@
 // bot の1回の出勤を、5秒ごとの位置で追う（迷う所を探す）。node tools/trace.mjs [性格] [種]
 import { createRunner, stepRunner } from '../shared/runner.js?v=16'
-import { COM, createRun, stepRun, commuteWorld, fmtClock, clockSec } from '../shared/commute.js?v=2'
+import { COM, createRun, stepRun, commuteWorld, fmtClock, clockSec } from '../shared/commute.js?v=3'
 import { createBot, botInput } from '../shared/bot.js?v=16'
 import { createStreet } from '../shared/street.js?v=16'
 const world = commuteWorld(), dt = 1 / 60

@@ -5,7 +5,7 @@
 //   blind:   上手く飛ぶが、隕石を全く見ない（よける操作が効いているかを測る）
 //   idle:    何もしない
 import { findAnchor } from './runner.js?v=16'
-import { goalOf } from './commute.js?v=2'
+import { goalOf, COM } from './commute.js?v=3'
 
 const K = 130 / 80
 const XS = [-320, -240, -160, -80, 0, 80, 160, 240, 320].map(x => x * K)
@@ -97,6 +97,12 @@ export function botInput(b, r, run, world, dt) {
   while (b.idx < b.plan.length - 1 && Math.hypot(b.plan[b.idx].x - r.x, b.plan[b.idx].z - r.z) < 9) b.idx++
   const final = b.idx >= b.plan.length - 1
   let p = final ? { x: G.x, z: G.z } : b.plan[b.idx]
+  // スーツが燃えていたら、近くの紳士服の店（前の緑の輪）に寄る（上手い人だけ。下手な人は気づいたら）
+  if (run.suit >= (b.kind === 'skilled' ? 2 : 3) && b.kind !== 'idle' && b.kind !== 'blind') {
+    COM.tailors.forEach((T, i) => { if (!run.tailorUsed[i] && Math.hypot(T.x - r.x, T.z - r.z) < 90 && (b.kind === 'skilled' || b.rnd() < 0.5)) b.tailor = i })
+  }
+  if (b.tailor != null && (run.tailorUsed[b.tailor] || run.suit === 0)) b.tailor = null
+  if (b.tailor != null) { const T = COM.tailors[b.tailor]; p = { x: T.x, z: T.z } }
   let want = Math.atan2(p.x - r.x, p.z - r.z)
   const dGoal = Math.hypot(goal.x - r.x, goal.z - r.z)
   // 隕石をよける: 輪の中心から離れる向き（進みたい向きに近い側の真横）へ
@@ -130,7 +136,7 @@ export function botInput(b, r, run, world, dt) {
   inp.steer = Math.max(-1, Math.min(1, -diff * 2.5))
   inp.throttle = Math.abs(diff) > 1.6 && r.grounded && !dodge ? 0.3 : 1
   if (dodge) inp.moveDir = { x: Math.sin(want), z: Math.cos(want) }
-  const swingOK = b.kind !== 'runner' && dGoal > 30
+  const swingOK = b.kind !== 'runner' && dGoal > 30 && !(b.tailor != null && Math.hypot(COM.tailors[b.tailor].x - r.x, COM.tailors[b.tailor].z - r.z) < 45)
   b.wT += dt
   let wire = false
   b.noWire = Math.max(0, (b.noWire || 0) - dt)
@@ -147,7 +153,7 @@ export function botInput(b, r, run, world, dt) {
     const a = findAnchor(world, { ...r, yaw: want, vx: Math.sin(want) * v, vz: Math.cos(want) * v })
     if (a && !(b.kind === 'clumsy' && b.rnd() < 0.33)) { wire = true; b.wT = 0; b.aim = a } else if (a) b.wT = 0
   }
-  if (r.rope && dGoal < 30 && r.y < 6) wire = true   // 着く前に振り子の下で外す
+  if (r.rope && (dGoal < 30 || (b.tailor != null && Math.hypot(COM.tailors[b.tailor].x - r.x, COM.tailors[b.tailor].z - r.z) < 30)) && r.y < 6) wire = true   // 着く前に振り子の下で外す
   // 空中で輪に向かっている時（上手い人だけ）: ワイヤーを外し、よける向きの掛け点へ掛け直す
   if (dodge && b.kind === 'skilled' && !r.grounded && m.tLeft < 1.3) {
     if (r.rope && !b.relDodge) { wire = true; b.relDodge = m.id }

@@ -1,8 +1,8 @@
 // 隕石の日でも出社する: 出勤の中身（時計・駅・会社・珍しい出来事・遅刻届の中身）。three.js に依存しない
 // v2: 住宅街の家 → 商店街 → 駅前広場の高架の駅（電車は止まっている）→ 川 → オフィス街の突き当たりの会社のタワー。地図は shared/commutemap.js
 import { mulberry } from './util.js?v=1'
-import { createSky, stepSky, dropAt, noteRunner, SKY } from './meteor.js?v=2'
-import { MAP } from './commutemap.js?v=2'
+import { createSky, stepSky, dropAt, noteRunner, SKY } from './meteor.js?v=3'
+import { MAP } from './commutemap.js?v=3'
 import { createWorld } from './track.js?v=16'
 import { addTown } from './town.js?v=16'
 import { buildPoles } from './street.js?v=16'
@@ -18,7 +18,12 @@ export const COM = {
   endMin: 9 * 60 + 12,    // これを過ぎたら欠勤扱いで終わる（268秒）。v1 は 9:10
   officeHitOdds: 0.04,    // 珍しい: 会社に隕石が落ちて臨時休業
   bossRideOdds: 0.06,     // 珍しい: 部長が隕石に乗って出社してくる
-  riderAt: [26, 40]       // 後輩が転がる隕石に乗って通り過ぎる時間
+  riderAt: [26, 40],      // 後輩が転がる隕石に乗って通り過ぎる時間
+  // v3（2026-11-09 本人「ゲームオーバーも時間に含めて被弾数のほうがいい。スーツが全焼してパンツ一丁になって捕まるみたいな」）
+  // 当たるたびにスーツが1段燃える: 0 スーツ → 1 焦げた → 2 上着が燃えた → 3 シャツも燃えた → 4 パンツ一丁（警察が追ってくる）→ 5 で確保（終わり）
+  suitStages: 5,
+  arrestSec: 5.2,         // 確保されてから結果の紙まで
+  tailors: MAP.tailors    // 紳士服の店: 前の緑の輪に入ると1段戻る（店ごとに1回）
 }
 export const DEADLINE = 9 * 60 * 60   // 9:00:00（秒）
 
@@ -36,7 +41,7 @@ export function createRun(world, seed = 1, opt = {}) {
     t: 0, leg: 0, over: false, arrived: null, rnd, rare, events: [], seed,
     riderAt: COM.riderAt[0] + rnd() * (COM.riderAt[1] - COM.riderAt[0]), riderDone: false,
     officeHit: false, officeHitAt: null, bossAt: null, bossLanded: false, endIn: null, path: 0, lx: COM.home.x, lz: COM.home.z, stationAt: null,
-    called9: false
+    called9: false, suit: 0, fixes: 0, tailorUsed: [], arrest: null
   }
   run.sky = createSky(world, seed, { rare })
   run.sky.goal = goalOf(run); run.sky.path = legPath(world, 0)
@@ -49,8 +54,25 @@ export function stepRun(run, r, dt, opt = {}) {
   const ev = run.events, sky = run.sky
   run.path += Math.hypot(r.x - run.lx, r.z - run.lz); run.lx = r.x; run.lz = r.z
   noteRunner(sky, r)
-  stepSky(sky, r, dt, { active: !run.arrived && !run.officeHit, spawn: opt.spawn !== false })
+  stepSky(sky, r, dt, { active: !run.arrived && !run.officeHit && !run.arrest, spawn: opt.spawn !== false })
   const c = clockSec(run)
+  // スーツ: 当たった回数（吹き飛ばされた・転がる隕石）から、紳士服の店で直した分を引く
+  const burnt = Math.min(COM.suitStages, sky.stats.hits + sky.stats.rollHits - run.fixes)
+  if (burnt > run.suit && !run.arrest) {
+    run.suit = burnt
+    if (run.suit >= COM.suitStages) {
+      run.arrest = { t: run.t, clock: c, x: r.x, z: r.z, leg: run.leg }
+      run.endIn = COM.arrestSec; sky.quiet = 99
+      ev.push({ t: 'arrest', clock: c })
+    } else ev.push({ t: 'suit', n: run.suit })
+  }
+  // 紳士服の店
+  if (run.suit > 0 && !run.arrest && r.y < 3) for (let i = 0; i < COM.tailors.length; i++) {
+    const T = COM.tailors[i]
+    if (run.tailorUsed[i] || Math.hypot(r.x - T.x, r.z - T.z) > T.r + 0.8) continue
+    run.tailorUsed[i] = true; run.fixes++; run.suit--
+    ev.push({ t: 'tailor', n: run.suit, i })
+  }
   // 駅: 電車は止まっている。会社まで行く
   if (run.leg === 0 && Math.hypot(r.x - COM.station.x, r.z - COM.station.z) < COM.station.r + 2 && r.y < 6) {
     run.leg = 1; run.stationAt = c; sky.goal = goalOf(run); sky.path = legPath(sky.world, 1); sky.leg = 1
@@ -69,7 +91,7 @@ export function stepRun(run, r, dt, opt = {}) {
   }
   // 珍しい: 会社に隕石（会社まで 220m を切ったら）
   const dO = Math.hypot(r.x - COM.office.x, r.z - COM.office.z)
-  if (run.rare === 'officeHit' && run.leg === 1 && !run.officeHitAt && !run.arrived && dO < 220) {
+  if (run.rare === 'officeHit' && run.leg === 1 && !run.officeHitAt && !run.arrived && !run.arrest && dO < 220) {
     run.officeHitAt = run.t
     sky.quiet = 6
     dropAt(sky, COM.officeBld.x, COM.officeBld.z, true, { kind: 'office', warn: 3.4, r: 20 })
@@ -80,14 +102,14 @@ export function stepRun(run, r, dt, opt = {}) {
     if (e.t === 'impact' && e.kind === 'boss') { run.bossLanded = true; ev.push({ t: 'bossLand' }) }
   }
   // 会社に着いた
-  if (run.leg === 1 && !run.arrived && !run.officeHit && dO < COM.office.r + 1.5 && r.y < 5) {
+  if (run.leg === 1 && !run.arrived && !run.officeHit && !run.arrest && dO < COM.office.r + 1.5 && r.y < 5) {
     run.arrived = c
     ev.push({ t: 'arrive', clock: c, late: c > DEADLINE })
     if (run.rare === 'bossRide') { run.bossAt = run.t; dropAt(sky, COM.bossSpot.x, COM.bossSpot.z, true, { kind: 'boss', warn: 2.4 }); run.endIn = 5.2 }
     else run.endIn = 2.6
   }
   if (run.endIn != null) { run.endIn -= dt; if (run.endIn <= 0) { run.over = true; ev.push({ t: 'end' }) } }
-  else if (c >= COM.endMin * 60) { run.over = true; ev.push({ t: 'absent' }); ev.push({ t: 'end' }) }
+  else if (c >= COM.endMin * 60 && !run.arrest) { run.over = true; ev.push({ t: 'absent' }); ev.push({ t: 'end' }) }
 }
 
 // 遅刻届・出勤記録の中身
@@ -95,7 +117,8 @@ export function verdict(run) {
   const S = run.sky.stats, ja = true
   const arr = run.arrived
   let status
-  if (run.officeHit) status = 'dayoff'
+  if (run.arrest) status = 'arrest'
+  else if (run.officeHit) status = 'dayoff'
   else if (arr == null) status = 'absent'
   else if (arr <= DEADLINE - 180) status = 'early'
   else if (arr <= DEADLINE) status = 'ontime'
@@ -112,7 +135,7 @@ export function verdict(run) {
   ex.sort((a, b) => b.n - a.n)
   const pardon = status === 'dayoff' || (run.rare === 'bossRide' && run.bossLanded)
   // 点数（同じ出勤の上手さを比べる。早いほど・よけるほど・当たらないほど高い）
-  const score = status === 'dayoff' ? 0 : arr == null ? 0 : Math.max(0, Math.round((DEADLINE + 900 - arr) * 1.2 + S.near * 25 + S.bestChain * 40 - S.hits * 30))
-  return { status, arr, lateMin, excuses: ex, pardon, near: S.near, bestChain: S.bestChain, hits: S.hits + S.rollHits, score, path: Math.round(run.path), rare: run.rare }
+  const score = status === 'dayoff' || status === 'arrest' ? 0 : arr == null ? 0 : Math.max(0, Math.round((DEADLINE + 900 - arr) * 1.2 + S.near * 25 + S.bestChain * 40 - S.hits * 30))
+  return { status, arr, lateMin, excuses: ex, pardon, near: S.near, bestChain: S.bestChain, hits: S.hits + S.rollHits, score, path: Math.round(run.path), rare: run.rare, suit: run.suit, fixes: run.fixes, arrest: run.arrest }
 }
 export { SKY }

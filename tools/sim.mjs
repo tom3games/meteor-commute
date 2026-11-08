@@ -1,6 +1,6 @@
 // bot の出勤を種を変えて回し、着いた時刻の分布を出す。node tools/sim.mjs [回数] [性格,性格]
 import { createRunner, stepRunner } from '../shared/runner.js?v=16'
-import { COM, createRun, stepRun, verdict, fmtClock, DEADLINE, commuteWorld } from '../shared/commute.js?v=2'
+import { COM, createRun, stepRun, verdict, fmtClock, DEADLINE, commuteWorld } from '../shared/commute.js?v=3'
 import { createBot, botInput } from '../shared/bot.js?v=16'
 import { createStreet } from '../shared/street.js?v=16'
 const world = commuteWorld()
@@ -28,9 +28,9 @@ if (process.argv[1] && process.argv[1].endsWith('sim.mjs')) {
     const rs = []
     for (let s = 1; s <= N; s++) rs.push(play(k, s, { rare: 'none' }))
     const arr = rs.filter(r => r.arr != null).map(r => r.arr).sort((a, b) => a - b)
-    const cnt = st => rs.filter(r => r.status === st).length
+    const cnt = st => rs.filter(r => r.status === st).length, onTime = rs.filter(r => r.status === 'early' || r.status === 'ontime').length
     const avg = a => (a.reduce((x, y) => x + y, 0) / Math.max(1, a.length))
-    console.log(`${k.padEnd(8)} 着 ${arr.length}/${N}  中央 ${arr.length ? fmtClock(arr[arr.length >> 1]) : '-'}  最速 ${arr.length ? fmtClock(arr[0]) : '-'}  早出${cnt('early')} 定時${cnt('ontime')} 遅刻${cnt('late')} 大遅刻${cnt('verylate')} 欠勤${cnt('absent')}  当たる ${avg(rs.map(r => r.hits)).toFixed(1)}  ギリギリ ${avg(rs.map(r => r.near)).toFixed(1)}  点 ${Math.round(avg(rs.map(r => r.score)))}  駅 ${fmtClock(COM.startMin * 60 + avg(rs.filter(r => r.stationAt).map(r => r.stationAt - COM.startMin * 60)))}`)
+    console.log(`${k.padEnd(8)} 着 ${arr.length}/${N}  中央 ${arr.length ? fmtClock(arr[arr.length >> 1]) : '-'}  最速 ${arr.length ? fmtClock(arr[0]) : '-'}  早出${cnt('early')} 定時${cnt('ontime')} 遅刻${cnt('late')} 大遅刻${cnt('verylate')} 欠勤${cnt('absent')} 確保${cnt('arrest')}  当たる ${avg(rs.map(r => r.hits)).toFixed(1)}  ギリギリ ${avg(rs.map(r => r.near)).toFixed(1)}  定時率 ${Math.round(onTime / N * 100)}%  確保率 ${Math.round(cnt('arrest') / N * 100)}%  直した ${avg(rs.map(r => r.fixes)).toFixed(1)}  道 ${Math.round(avg(rs.map(r => r.path)))}m  点 ${Math.round(avg(rs.map(r => r.score)))}  駅 ${fmtClock(COM.startMin * 60 + avg(rs.filter(r => r.stationAt).map(r => r.stationAt - COM.startMin * 60)))}`)
     if (process.env.V) rs.forEach((r, i) => console.log('   ', i + 1, r.status, r.arr ? fmtClock(r.arr) : '-', 'hit', r.hits, 'near', r.near, 'path', r.path))
   }
 }

@@ -1,7 +1,7 @@
 // 開始地点から、どの向きにワイヤーが掛かるかを角度別のレイトレースで測る。node tools/reach.mjs
 // 実際の判定（runner.js の rayHit＝画面タップ、findAnchor＝ワイヤーボタン）をそのまま使う
 import { createRunner, findAnchor, rayHit, RUN } from '../shared/runner.js?v=16'
-import { COM, commuteWorld } from '../shared/commute.js?v=2'
+import { COM, commuteWorld } from '../shared/commute.js?v=3'
 
 // 向き deg（0=南+z、90=東+x）に、水平から pitchTop 度までの上向きの線を振って、最初に掛かる点の距離（無ければ null）
 export function tapReach(world, x, y, z, deg, range = RUN.wireRange) {

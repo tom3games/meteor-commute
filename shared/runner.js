@@ -111,18 +111,29 @@ function local(o, x, z) {
   return { u: dx * c - dz * s, v: dx * s + dz * c, c, s }
 }
 
+// 箱の上の面の高さ（x, z の所）。外なら null。切妻屋根（一軒家・神社）は見た目の屋根の面（軒の出 0.6m・厚み 0.08m）に合わせる
+// v3（2026-11-09 本人「一軒家の屋根の当たり判定おかしい。体が埋もれる」）: 棟の近くは横から入ると屋根の中に入っていた。床も壁もこの高さを使う
+export const EAVE = { slope: 0.6, ridge: 0.5, t: 0.08 }
+export function topAt(o, x, z, p = local(o, x, z)) {
+  if (o.gable) {
+    const ou = o.ridgeX ? EAVE.ridge : EAVE.slope, ov = o.ridgeX ? EAVE.slope : EAVE.ridge
+    if (Math.abs(p.u) > o.hw + ou || Math.abs(p.v) > o.hl + ov) return null
+    const run = (o.ridgeX ? o.hl : o.hw) + EAVE.slope, d = o.ridgeX ? Math.abs(p.v) : Math.abs(p.u)
+    return o.y1 + EAVE.t + o.gable * Math.max(0, 1 - d / run)
+  }
+  if (Math.abs(p.u) > o.hw + 0.15 || Math.abs(p.v) > o.hl + 0.15) return null
+  return o.y1
+}
+
 // 足元の高さ（地面・橋・建物の屋上）。y より少し上までの面だけを見る
 export function floorAt(world, x, z, y) {
   let h = world.groundAt(x, z, y + 0.5).h
   let roof = null
   for (const o of solids(world, x, z)) {
-    if (o.y1 > y + 0.6 || o.y1 <= h) continue
-    const p = local(o, x, z)
-    if (Math.abs(p.u) <= o.hw + 0.15 && Math.abs(p.v) <= o.hl + 0.15) {
-      // 切妻屋根（一軒家）: 棟へ向かって床が上がる。乗っても屋根に埋まらない
-      const top = o.gable ? o.y1 + o.gable * Math.max(0, 1 - (o.ridgeX ? Math.abs(p.v) / o.hl : Math.abs(p.u) / o.hw)) : o.y1
-      if (top <= y + 0.6) { h = Math.max(h, top); roof = o }
-    }
+    if (o.y1 <= h - (o.gable || 0) - 0.1) continue
+    const top = topAt(o, x, z)
+    if (top == null || top > y + 0.6 || top <= h) continue
+    h = top; roof = o
   }
   return { h, roof }
 }
@@ -575,14 +586,17 @@ function physics(r, thr, dt, world, passive) {
   // 壁・柵
   let wall = null
   for (const o of solids(world, r.x, r.z)) {
-    if (r.y >= o.y1 - 0.05 || r.y + RUN.height <= o.y0) continue
+    if (r.y + RUN.height <= o.y0 || r.y >= o.y1 + (o.gable ? o.gable + EAVE.t : 0) - 0.05) continue
     const p = local(o, r.x, r.z)
     const pu = o.hw + R - Math.abs(p.u), pv = o.hl + R - Math.abs(p.v)
     if (pu <= 0 || pv <= 0) continue
-    // 低い段差は乗り越える
-    if (o.y1 - r.y <= RUN.stepUp && !passive) { r.y = o.y1; if (r.vy < 0) r.vy = 0; continue }
+    // 上の面（切妻屋根なら、いる所の屋根の高さ）。壁の外側の半径の所は、壁の際の高さ
+    const top = o.gable ? (topAt(o, r.x, r.z, p) ?? o.y1) : o.y1
+    if (r.y >= top - 0.05) continue
+    // 低い段差は乗り越える（屋根の斜面を登るのもここ）
+    if (top - r.y <= RUN.stepUp && !passive) { r.y = top; if (r.vy < 0) r.vy = 0; continue }
     // 前の位置が箱の上なら、上に乗る
-    if (py >= o.y1 - 0.25) { r.y = o.y1; if (r.vy < 0) r.vy = 0; continue }
+    if (py >= top - 0.25) { r.y = top; if (r.vy < 0) r.vy = 0; continue }
     // 浅い方へ押し出す
     let nu = 0, nv = 0
     if (pu < pv) nu = Math.sign(p.u) || 1
@@ -596,7 +610,7 @@ function physics(r, thr, dt, world, passive) {
       if (-into > 14 && !r.rope) r.events.push({ t: 'bonk', speed: -into })
       r.vx -= into * nx; r.vz -= into * nz
     }
-    if (!wall || o.y1 > wall.top) wall = { nx, nz, top: o.y1, o }
+    if (!wall || top > wall.top) wall = { nx, nz, top, o }
   }
 
   // 壁を駆け上がる（壁に向かって前を押している。ワイヤー中は外してから）

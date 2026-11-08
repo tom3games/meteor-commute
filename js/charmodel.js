@@ -14,18 +14,71 @@ const CHAR_FILES = [...new Set([...CUST_CHARS.normal, CUST_CHARS.duf, CUST_CHARS
 export const charAssets = A
 
 // 色見本（8x4 のグラデーションの升）を塗り替える。升の位置は ranger_texture.png を見て決めた
-function recolor(img) {
+// v3: スーツの燃え具合（0 スーツ → 1 焦げ → 2 上着なし → 3 シャツも焼けた → 4 パンツ一丁）ごとに1枚ずつ作る。警官（police）も同じ見本から
+// 升の使われ方（GLB の UV を数えた）: 胴 = 7,0・3,0・5,0・6,0・0,1・7,1／腕 = 7,2・0,0・6,0・7,0・3,0・1,1／脚 = 3,2・7,1／頭 = 0,0・1,0・2,0
+const SUIT = ['#4a5163', '#252a36'], PANTS = ['#41475a', '#22262f'], TIE = ['#d23a2a', '#8e1d14'], SHIRT = ['#f6f4ee', '#d4d7da'], SKIN = ['#f8c9a4', '#eaa57f']
+function recolor(img, stage = 0) {
   const c = document.createElement('canvas'); c.width = img.width; c.height = img.height
   const x = c.getContext('2d'); x.drawImage(img, 0, 0)
   const cw = img.width / 8, ch = img.height / 4
-  const grad = (col, row, top, bot, cols = 1) => { const g = x.createLinearGradient(0, row * ch, 0, (row + 1) * ch); g.addColorStop(0, top); g.addColorStop(1, bot); x.fillStyle = g; x.fillRect(col * cw, row * ch, cw * cols, ch) }
-  grad(5, 0, '#4a5163', '#252a36', 2)   // 生成りの上着 → 濃い灰色のスーツ
-  grad(2, 2, '#4a5163', '#252a36')      // 同じ生成りの別の升
-  grad(0, 1, '#d23a2a', '#8e1d14')      // 青いスカーフ → 赤いネクタイ
-  grad(1, 2, '#d23a2a', '#8e1d14')
+  const grad = (col, row, [top, bot], cols = 1) => { const g = x.createLinearGradient(0, row * ch, 0, (row + 1) * ch); g.addColorStop(0, top); g.addColorStop(1, bot); x.fillStyle = g; x.fillRect(col * cw, row * ch, cw * cols, ch) }
+  let q = 7 + stage * 131; const rnd = () => (q = (q * 16807) % 2147483647) / 2147483647
+  // 焦げ跡（黒いしみと、まだ赤い火の粉）
+  const soot = (col, row, n, ember = true) => {
+    for (let i = 0; i < n; i++) { const px = (col + rnd()) * cw, py = (row + rnd()) * ch, r = cw * (0.05 + rnd() * 0.12); const g = x.createRadialGradient(px, py, 0, px, py, r); g.addColorStop(0, 'rgba(18,14,12,.92)'); g.addColorStop(0.7, 'rgba(40,30,24,.55)'); g.addColorStop(1, 'rgba(40,30,24,0)'); x.fillStyle = g; x.fillRect(px - r, py - r, r * 2, r * 2) }
+    if (ember) for (let i = 0; i < n / 3; i++) { x.fillStyle = rnd() < 0.5 ? '#ff7a1a' : '#ffb03a'; x.fillRect((col + rnd()) * cw, (row + rnd()) * ch, cw * 0.025, ch * 0.025) }
+  }
+  // 破れて焼けたシャツ: 肌の上に、ぎざぎざの白い布の切れ端
+  const rags = (col, row) => {
+    grad(col, row, SKIN)
+    for (let i = 0; i < 9; i++) {
+      const y = row * ch + rnd() * ch * 0.75, h = ch * (0.06 + rnd() * 0.12)
+      x.fillStyle = '#ece9e2'; x.beginPath(); x.moveTo(col * cw, y)
+      for (let k = 0; k <= 8; k++) x.lineTo(col * cw + cw * k / 8, y + (k % 2 ? h : h * 0.3) * (0.6 + rnd() * 0.8))
+      x.lineTo((col + 1) * cw, y - h * 0.2); x.closePath(); x.fill()
+    }
+    soot(col, row, 10, false)
+  }
+  // トランクス（白地に青い縞）を升の a〜b の高さに
+  function trunks(col, row, a, b) {
+    x.fillStyle = '#f4f6fa'; x.fillRect(col * cw, (row + a) * ch, cw, (b - a) * ch)
+    x.fillStyle = '#3a6fd0'; for (let k = 0; k < 7; k++) x.fillRect(col * cw + cw * (k + 0.3) / 7, (row + a) * ch, cw * 0.045, (b - a) * ch)
+  }
+  const police = stage === 'police'
+  const jacket = police ? ['#2f4170', '#1b2747'] : SUIT
+  if (police || stage <= 1) { grad(5, 0, jacket, 2); grad(2, 2, jacket); grad(7, 0, police ? ['#2f4170', '#1b2747'] : ['#3b4252', '#1f232d']) }
+  else if (stage === 2) { grad(5, 0, SHIRT, 2); grad(2, 2, SHIRT); grad(7, 0, SHIRT) }
+  else if (stage === 3) { rags(5, 0); rags(6, 0); rags(7, 0); grad(2, 2, SKIN) }
+  else {
+    // パンツ一丁: 胴は肌。ベルトの升（3,0）はトランクスのゴム、升の下の方（腰から下）はトランクス
+    grad(5, 0, SKIN, 2); grad(2, 2, SKIN); grad(7, 0, SKIN); grad(7, 2, SKIN); grad(1, 1, SKIN)
+    grad(3, 0, ['#f4f6fa', '#dfe4ec'])
+    for (const col of [5, 6, 7]) trunks(col, 0, 0.62, 1)
+  }
+  grad(0, 1, police ? ['#7a8fb8', '#4a5f88'] : TIE); grad(1, 2, police ? ['#7a8fb8', '#4a5f88'] : TIE)   // ネクタイ（パンツ一丁でも残す）
+  if (police || stage < 4) grad(3, 2, police ? ['#2f4170', '#1b2747'] : PANTS)
+  else {
+    // パンツ一丁: 脚は肌。脚の升は上下が逆（升の上が足首）なので、升の下の方（腿の付け根）を白地に青い縞のトランクスに
+    grad(3, 2, SKIN); trunks(3, 2, 0.72, 1)
+  }
+  // 焼け穴（下の白いシャツが見える穴の縁が赤く焦げる）。紺の上では黒いしみが見えにくいので穴で見せる
+  const holes = (col, row, n) => {
+    for (let i = 0; i < n; i++) {
+      const px = (col + 0.1 + rnd() * 0.8) * cw, py = (row + 0.1 + rnd() * 0.8) * ch, r = cw * (0.07 + rnd() * 0.08)
+      const g = x.createRadialGradient(px, py, 0, px, py, r * 1.7)
+      g.addColorStop(0, '#efe9df'); g.addColorStop(0.45, '#efe9df'); g.addColorStop(0.55, '#e0621c'); g.addColorStop(0.68, '#5a2a14'); g.addColorStop(1, 'rgba(20,14,10,0)')
+      x.fillStyle = g; x.fillRect(px - r * 1.7, py - r * 1.7, r * 3.4, r * 3.4)
+    }
+  }
+  if (stage === 1) { soot(5, 0, 16); soot(6, 0, 16); soot(7, 0, 22); soot(3, 2, 16); holes(5, 0, 5); holes(6, 0, 5); holes(7, 0, 9); holes(3, 2, 6) }
+  if (stage === 2) { soot(5, 0, 14); soot(6, 0, 14); soot(7, 0, 20); soot(3, 0, 12); soot(3, 2, 24) }
+  if (stage === 3) soot(3, 2, 34)
   const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.flipY = false
   return t
 }
+
+const suitTex = []
+export function suitTexture(stage) { if (!A._img) return null; const k = stage === 'police' ? 9 : stage; return suitTex[k] || (suitTex[k] = stage === 0 ? A._tex : recolor(A._img, stage)) }
 
 export function loadCharAssets() {
   if (A.loading) return A.loading
@@ -38,7 +91,7 @@ export function loadCharAssets() {
         if (o.isMesh) {
           o.castShadow = true; o.frustumCulled = false
           if (/Quiver|Cape/.test(o.name)) o.visible = false
-          if (o.material && o.material.map && !A._tex) A._tex = recolor(o.material.map.image)
+          if (o.material && o.material.map && !A._tex) { A._img = o.material.map.image; A._tex = recolor(A._img, 0) }
           if (o.material && A._tex) { o.material = o.material.clone(); o.material.map = A._tex; o.material.roughness = 0.7; o.material.metalness = 0 }
         }
       })
@@ -105,6 +158,14 @@ export class CharRunnerModel {
     }
     this.handWorld = new THREE.Vector3(); this.state = 'idle'; this.phase = 0; this.lastThrow = 0
     this._t = new THREE.Vector3()
+    this.mats = []; ch.traverse(o => { if (o.isMesh && o.material && o.material.map) this.mats.push(o.material) })
+    this.suit = 0; this.handsUp = false
+  }
+  // スーツの燃え具合（0〜4）。体の絵を差し替える（鞄はパンツ一丁でも持っている）
+  setSuit(n) {
+    if (n === this.suit) return
+    this.suit = n
+    const tx = suitTexture(n); if (tx) for (const m of this.mats) { m.map = tx; m.needsUpdate = true }
   }
   play(name, fade = 0.18) {
     const a = this.acts[name]; if (!a || this.cur === a) return
@@ -166,6 +227,17 @@ export class CharRunnerModel {
         this._t.y += up * 0.3
         aimBone(B['upperarm.' + sd], B['lowerarm.' + sd], this._t, 0.9)
       }
+    }
+    // 確保: 両手を挙げる
+    // 頭が大きいので真上に挙げると頭に隠れる。肘を横に張って、前腕を上へ（降参の形）
+    if (this.handsUp && B['upperarm.l'] && B.chest && !s.rope) for (const sd of ['l', 'r']) {
+      B.chest.getWorldPosition(_b); B['upperarm.' + sd].getWorldPosition(_a)
+      const ox = _a.x - _b.x, oz = _a.z - _b.z, ol = Math.hypot(ox, oz) || 1
+      this._t.set(_a.x + ox / ol * 1.0, _a.y + 0.35, _a.z + oz / ol * 1.0)
+      aimBone(B['upperarm.' + sd], B['lowerarm.' + sd], this._t, 1)
+      B['lowerarm.' + sd].getWorldPosition(_a)
+      this._t.set(_a.x + ox / ol * 0.15, _a.y + 1, _a.z + oz / ol * 0.15)
+      aimBone(B['lowerarm.' + sd], B['wrist.' + sd], this._t, 1)
     }
     // 岡持ち: 腰の横（左）に下げる。腕は使わない（ワイヤーで腕を上げても箱が空を向かないように）
     if (B.hips) {
@@ -340,3 +412,41 @@ export class Person {
   }
 }
 export const PERSON = { kohai: 'female-b', senpai: 'male-a', boss: 'male-d', staff: 'male-c' }
+
+// v3: 警官（確保の場面）。配達員と同じ人形を紺の制服に塗り、帽子をかぶせる
+export class Officer {
+  constructor() { this.group = new THREE.Group(); this.ok = false; this.cur = null; this.t = 0 }
+  ensure() {
+    if (this.ok) return true
+    if (!A.ready || !A.ranger) return false
+    const ch = this.char = skClone(A.ranger)
+    const box = new THREE.Box3().setFromObject(ch), k = 1.8 / (box.max.y - box.min.y)
+    ch.scale.setScalar(k); ch.position.y = -box.min.y * k
+    const tx = suitTexture('police')
+    ch.traverse(o => { if (o.isMesh && o.material) { o.material = o.material.clone(); if (tx) o.material.map = tx; o.castShadow = true; o.frustumCulled = false } })
+    this.group.add(ch); this.group.updateMatrixWorld(true)
+    // 帽子: 頭のいちばん上に、紺の帽子と黒いつば・金の徽章
+    let head = null, hb = null
+    ch.traverse(o => { if (o.isBone && o.name === 'head') hb = o; if (o.isMesh && /Head/.test(o.name)) head = o })
+    if (hb && head) {
+      head.geometry.computeBoundingBox()
+      const s = new THREE.Vector3(); head.geometry.boundingBox.getSize(s); s.multiplyScalar(k)
+      const r = Math.max(s.x, s.z) * 0.46, cap = new THREE.Group()
+      const navy = new THREE.MeshStandardMaterial({ color: 0x1f2b4d, roughness: 0.6 })
+      const crown = new THREE.Mesh(new THREE.CylinderGeometry(r * 1.08, r * 0.98, r * 0.55, 20), navy); crown.position.y = r * 0.28
+      const band = new THREE.Mesh(new THREE.CylinderGeometry(r * 1.0, r * 1.0, r * 0.16, 20), new THREE.MeshStandardMaterial({ color: 0x111111 })); band.position.y = r * 0.06
+      const visor = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.75, r * 0.75, 0.03, 16, 1, false, -Math.PI / 2, Math.PI), new THREE.MeshStandardMaterial({ color: 0x0c0c0c, roughness: 0.3 })); visor.position.set(0, 0, r * 0.62)
+      const badge = new THREE.Mesh(new THREE.CircleGeometry(r * 0.13, 12), new THREE.MeshStandardMaterial({ color: 0xd8b04a, metalness: 0.8, roughness: 0.3 })); badge.position.set(0, r * 0.3, r * 1.09)
+      cap.add(crown, band, visor, badge)
+      const topW = new THREE.Vector3(); hb.getWorldPosition(topW); topW.y = 1.8 - r * 0.15
+      hb.worldToLocal(topW); cap.position.copy(topW); cap.scale.setScalar(1 / k)
+      hb.add(cap)
+    }
+    this.mixer = new THREE.AnimationMixer(ch); this.acts = {}
+    for (const n of ['Idle_A', 'Walking_A', 'Running_A', 'Interact']) if (A.clips[n]) this.acts[n] = this.mixer.clipAction(A.clips[n])
+    this.ok = true; this.play('Idle_A')
+    return true
+  }
+  play(n) { if (!this.ok) return; const a = this.acts[n] || this.acts.Idle_A; if (!a || this.cur === a) return; a.reset().fadeIn(0.15).play(); if (this.cur) this.cur.fadeOut(0.15); this.cur = a }
+  update(dt, moving) { if (!this.ensure()) return; this.play(moving ? 'Running_A' : 'Idle_A'); this.mixer.update(dt) }
+}

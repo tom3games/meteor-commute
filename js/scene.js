@@ -7,7 +7,7 @@ import { Q } from './quality.js?v=16'
 import { createFacade } from './facade.js?v=16'
 import { terrain, toWorld, slabTop, forestDensity } from '../shared/track.js?v=16'
 import { DESTRUCT } from '../shared/config.js?v=16'
-import { drawLook, drawDeco } from './map3d.js?v=2'
+import { drawLook, drawDeco } from './map3d.js?v=3'
 
 const PAL = {
   grass: 0x6f9a4a, grass2: 0x86ab55, dirt: 0x9a7a52, rock: 0x8a6a55, rockDark: 0x5e4a3f, city: 0x8a8e94,
@@ -249,7 +249,7 @@ export function buildScene(scene, world) {
         const hz = ((kk * 2654435761) >>> 0) / 4294967296   // ビルごとの揺らぎ（同じ色が並ばないように）
         const color = new THREE.Color(BUILD_COLORS[(kk * 5) % BUILD_COLORS.length]).lerp(new THREE.Color(hz < 0.5 ? 0xffffff : 0xd8c8b0), 0.12 + hz * 0.4).offsetHSL((hz - 0.5) * 0.04, (hz - 0.5) * 0.12, (((kk * 7) % 5) - 2) * 0.025)
         // 外壁の型: 高いビルはガラスか事務所、低いものはマンション・レンガ・事務所
-        const style = o.company ? 2 : o.dept ? 0 : o.h > 55 ? [2, 0, 1, 2, 0][kk % 5] : [1, 0, 3, 1, 2, 3, 0][kk % 7]
+        const style = o.bstyle != null ? o.bstyle : o.company ? 2 : o.dept ? 0 : o.h > 55 ? [2, 0, 1, 2, 0][kk % 5] : [1, 0, 3, 1, 2, 3, 0][kk % 7]
         if (o.yaw) bld.box(o.cx, cy, o.cz, o.hw, o.h / 2, o.hl, color.getHex(), o.yaw, { noTop: true, shade: false })
         else facade.building(o.cx - o.hw, o.cz - o.hl, o.cx + o.hw, o.cz + o.hl, o.y0, o.h, style, color.getHex(), (kk * 0.618) % 1)
         // 縦看板（通りから見える面の角）と屋上の広告
@@ -261,12 +261,22 @@ export function buildScene(scene, world) {
           for (const sx of [-4.5, 4.5]) met.box(o.cx + sx, o.y0 + o.h + 1.1, o.cz + o.hl - 3.3, 0.15, 1.1, 0.15, 0x6d7278, 0)
         }
         // 屋上: 給水タンクとアンテナ（高いビル）
-        if (kk % 4 === 3) met.box(o.cx - o.hw * 0.3, o.y0 + o.h + 1.6, o.cz + o.hl * 0.25, 1.4, 1.3, 1.4, 0x9aa3ab, 0)
+        if (!o.roofProps && kk % 4 === 3) met.box(o.cx - o.hw * 0.3, o.y0 + o.h + 1.6, o.cz + o.hl * 0.25, 1.4, 1.3, 1.4, 0x9aa3ab, 0)
         if (o.h > 55) met.box(o.cx, o.y0 + o.h + 5, o.cz, 0.12, 5, 0.12, 0xc9ced6, 0)
-        // 屋上（コンクリート）と塔屋・室外機
-        conc.box(o.cx, o.y0 + o.h + 0.15, o.cz, o.hw + 0.25, 0.3, o.hl + 0.25, 0xbab6ae, o.yaw)
-        conc.box(o.cx + o.hw * 0.3, o.y0 + o.h + 1.4, o.cz - o.hl * 0.2, Math.min(3, o.hw * 0.3), 1.2, Math.min(2.5, o.hl * 0.25), 0xcfcac2, 0)
-        for (let j = 0; j < 3; j++) met.box(o.cx - o.hw * 0.4 + j * 1.6, o.y0 + o.h + 0.75, o.cz + o.hl * 0.4, 0.6, 0.45, 0.6, 0xb8bcc2, 0)
+        // 屋上（コンクリート）。v3: 上の面を当たりの高さ（y1）にそろえる（0.3m 上に出ていて、乗ると足が埋まっていた）
+        conc.box(o.cx, o.y0 + o.h - 0.14, o.cz, o.hw + 0.25, 0.15, o.hl + 0.25, 0xbab6ae, o.yaw)
+        if (!o.roofProps) {   // 塔屋・室外機（v3 の街は当たる箱として地図が持つ。js/map3d.js が描く）
+          conc.box(o.cx + o.hw * 0.3, o.y0 + o.h + 1.4, o.cz - o.hl * 0.2, Math.min(3, o.hw * 0.3), 1.2, Math.min(2.5, o.hl * 0.25), 0xcfcac2, 0)
+          for (let j = 0; j < 3; j++) met.box(o.cx - o.hw * 0.4 + j * 1.6, o.y0 + o.h + 0.75, o.cz + o.hl * 0.4, 0.6, 0.45, 0.6, 0xb8bcc2, 0)
+        }
+      } else if (o.kind === 'parked') {
+        // 駐車場の車（当たる）: 車体・客室・窓・タイヤ
+        const cols = [0xe8e8e4, 0x2b2f36, 0xb8bec6, 0x8a1f1f, 0x2d4f7a, 0xd8c8a0]
+        const c = cols[(o.seed || 0) % cols.length], along = o.hw > o.hl, L = Math.max(o.hw, o.hl), Wd = Math.min(o.hw, o.hl)
+        other.box(o.cx, o.y0 + 0.5, o.cz, along ? L : Wd, 0.32, along ? Wd : L, c)
+        other.box(o.cx, o.y0 + 1.12, o.cz, along ? L * 0.55 : Wd * 0.9, 0.32, along ? Wd * 0.9 : L * 0.55, c, 0, { top: c })
+        other.box(o.cx, o.y0 + 1.1, o.cz, along ? L * 0.56 : Wd * 0.92, 0.2, along ? Wd * 0.92 : L * 0.56, 0x26323c)
+        for (const a of [-1, 1]) for (const b2 of [-1, 1]) other.box(o.cx + (along ? a * L * 0.62 : b2 * Wd * 0.9), o.y0 + 0.32, o.cz + (along ? b2 * Wd * 0.9 : a * L * 0.62), along ? 0.32 : 0.1, 0.32, along ? 0.1 : 0.32, 0x1a1a1a)
       } else if (o.kind === 'whouse') conc.box(o.cx, cy, o.cz, o.hw, o.h / 2, o.hl, 0x9aa6b2, o.yaw)
       else if (o.kind === 'rail') {
         // ガードレール: 波形の横板と支柱

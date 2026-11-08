@@ -1,4 +1,4 @@
-// SNS 用の画像 og.png（1200x630）。v2: 川の斜張橋の上をワイヤーで振り抜ける瞬間。すぐ後ろで隕石が炸裂、橋の先に大きい輪、正面に会社のタワー。node og.mjs
+// SNS 用の画像 og.png（1200x630）。v3: スーツが燃えて白いシャツ（2段目）になった姿で。v2: 川の斜張橋の上をワイヤーで振り抜ける瞬間。すぐ後ろで隕石が炸裂、橋の先に大きい輪、正面に会社のタワー。node og.mjs
 import './mute-auto.mjs'  // テスト中は絶対に音を出さない（playwright を無音に差し替え）
 import { chromium } from 'playwright'
 import { spawn } from 'node:child_process'
@@ -17,6 +17,7 @@ const A = process.argv.slice(2).map(Number)
 await p.evaluate(([cx, cy, cz]) => {
   const M = meteor, me = M.me
   M.dbg.pause(true); M.dbg.quiet(999); M.run.sky.falling.length = 0
+  M.dbg.burn(2); M.dbg.step(1); M.run.sky.falling.length = 0
   const X = 0, Z = 772
   M.dbg.teleport(X - 3, 12, Z, 0.12)
   Object.assign(me, { grounded: false, vx: 2, vz: 24, vy: 5 })
@@ -47,7 +48,7 @@ await p.evaluate(([cx, cy, cz]) => {
     <div style="font-family:'BIZ UDPGothic',sans-serif;font-weight:700;font-size:19px;color:#d8341f">部長から着信</div>
     <div style="font-family:'Klee One',sans-serif;font-size:34px;margin-top:4px">「隕石？ 知らん。遅刻すんなよ」</div>
   </div>
-  <div style="position:fixed;left:52px;bottom:34px;z-index:31;color:#fff;font-family:'BIZ UDPGothic',sans-serif;font-weight:700;font-size:24px;text-shadow:0 2px 8px rgba(0,0,0,.8)">赤い輪をギリギリでよけて、9:00 までに会社へ</div>`
+  <div style="position:fixed;left:52px;bottom:34px;z-index:31;color:#fff;font-family:'BIZ UDPGothic',sans-serif;font-weight:700;font-size:24px;text-shadow:0 2px 8px rgba(0,0,0,.8)">赤い輪をよけて 9:00 までに会社へ。当たるたびにスーツが燃える</div>`
   document.body.appendChild(d)
 }, A)
 await p.waitForTimeout(700)

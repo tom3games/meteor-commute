@@ -9,7 +9,7 @@
 
 import { DESTRUCT, PHYS, SURFACE, GAME } from './config.js?v=16'
 import { buildCity, cityTerrain } from './city.js?v=16'
-import { buildCommute } from './commutemap.js?v=2'
+import { buildCommute } from './commutemap.js?v=3'
 
 export const FALL_SEC = 1.6  // 鉄塔が倒れ切るまで
 const sstep = (a, b, x) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t) }
