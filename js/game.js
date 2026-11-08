@@ -19,7 +19,7 @@ import { addTown, clearShopFront } from '../shared/town.js?v=16'
 import { buildPoles3d, buildHouses3d, trafficPool, pedPool } from './street3d.js?v=16'
 import { carLights } from './carmodel.js?v=16'
 import { MeteorView, NewsHeli } from './meteor3d.js?v=1'
-import { drawCard } from './card.js?v=1'
+import { drawCard } from './card.js?v=2'
 
 const $ = id => document.getElementById(id)
 // ---------------------------------------------------------------- 読み込みの進み具合（ロード画面）
@@ -74,7 +74,7 @@ const T = {
     stationName: '明星台駅', stationBoard: '運転見合わせ', officeName: 'ドンマイ商事', homeName: 'メゾン朝日', townName: 'ようこそ 朝日町', arcadeName: 'あさひ通り商店街', screenLines: ['隕石', '多数', '落下中'], screenFoot: '外出は控えて',
     titles: { early: '出勤記録', ontime: '出勤記録', late: '遅刻届', verylate: '遅刻届', absent: '欠勤届', dayoff: '臨時休業のお知らせ' },
     stamps: { early: '早出', ontime: '受理', late: '却下', verylate: '却下', absent: '欠勤', dayoff: '休業', pardon: '不問' },
-    lab: { date: '日付', name: '氏名', live: '中継', arrive: '出社時刻', reason: '理由', reasonOk: '道中の災難', noReason: '特になし', boss: '部長の欄' },
+    lab: { date: '日付', name: '氏名', live: '中継', arrive: '出社時刻', reason: '理由', reasonOk: '道中の災難', noReason: '特になし', boss: '部長の欄', times: n => `（${n}回）`, quote: s => `「${s}」` },
     you: 'あなた（営業部）',
     reasons: { hit: '隕石に吹き飛ばされたため', roll: '転がる隕石に追われたため', hot: 'クレーターが熱かったため', burn: '燃えるビルに掛けられなかったため', train: '電車が隕石で止まったため' },
     statL: ['ギリギリ回避', '最大連続', '吹き飛ばされた'], unit: ['回', '連続', '回'],
@@ -123,7 +123,7 @@ const T = {
     stationName: 'Myojodai Sta.', stationBoard: 'SUSPENDED', officeName: 'Donmai Trading', homeName: 'Maison Asahi', townName: 'ASAHI-CHO', arcadeName: 'ASAHI-DORI ARCADE', screenLines: ['METEORS', 'FALLING', 'NOW'], screenFoot: 'STAY INSIDE',
     titles: { early: 'Attendance Record', ontime: 'Attendance Record', late: 'Late Arrival Form', verylate: 'Late Arrival Form', absent: 'Absence Form', dayoff: 'Office Closed Today' },
     stamps: { early: 'EARLY', ontime: 'OK', late: 'NO', verylate: 'NO', absent: 'ABSENT', dayoff: 'CLOSED', pardon: 'PARDON' },
-    lab: { date: 'Date', name: 'Name', live: 'LIVE', arrive: 'Arrived', reason: 'Reason', reasonOk: 'On the way', noReason: 'None', boss: 'Boss' },
+    lab: { date: 'Date', name: 'Name', live: 'LIVE', arrive: 'Arrived', reason: 'Reason', reasonOk: 'On the way', noReason: 'None', boss: 'Boss', times: n => ` (x${n})`, quote: s => `"${s}"` },
     you: 'You (Sales)',
     reasons: { hit: 'Blown away by a meteor', roll: 'Chased by a rolling meteor', hot: 'The crater was too hot', burn: 'Could not wire a burning building', train: 'Trains stopped by a meteor' },
     statL: ['Close calls', 'Best chain', 'Blown away'], unit: ['', '', ''],

@@ -54,7 +54,7 @@ export function drawCard(cv, d) {
   for (let i = 0; i < items.length; i++) {
     const yy = y + 4 + i * 48, it = items[i]
     // 手書きの言い訳（チェック欄にしない）。書き直した跡のように行ごとに少しずれる
-    const s = (i ? '' : '') + it.text + (it.n > 1 ? `（${it.n}回）` : '')
+    const s = (i ? '' : '') + it.text + (it.n > 1 ? d.lab.times(it.n) : '')
     x.save(); x.translate(L + 190 + (i % 2) * 6, yy); x.rotate((i % 2 ? 0.012 : -0.008))
     x.fillStyle = INK; fitText(x, s, R - L - 200, 32, '"Klee One", sans-serif', '600'); x.fillText(s, 0, 0)
     x.restore()
@@ -77,7 +77,7 @@ export function drawCard(cv, d) {
   x.fillStyle = '#efe9da'; x.fillRect(L, y, R - L, boxH)
   x.font = font(24, F.sans); x.fillStyle = '#5a5649'; x.fillText(d.lab.boss, L + 20, y + 40)
   x.font = hand(36); x.fillStyle = INK
-  const lines = wrap(x, '「' + d.comment + '」', R - L - 230)
+  const lines = wrap(x, d.lab.quote(d.comment), R - L - 230)
   lines.slice(0, 2).forEach((s, i) => x.fillText(s, L + 20, y + 88 + i * 46))
   // 判子（赤い丸）
   const sx = R - 112, sy = y + boxH / 2
