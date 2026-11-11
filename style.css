@@ -30,7 +30,7 @@ button,a{font:inherit;color:inherit;background:none;border:0;cursor:pointer;touc
 #boot-err{position:fixed;inset:auto 8px 8px 8px;z-index:99;background:#fff;color:#b00;font:12px/1.4 monospace;white-space:pre-wrap;padding:10px;border-radius:6px}
 
 /* ---------- タイトル: 朝のニュースの速報 ---------- */
-#title{display:flex;flex-direction:column;align-items:center;padding:0 16px max(12px,env(safe-area-inset-bottom));background:linear-gradient(180deg,rgba(14,18,32,.62) 0%,rgba(14,18,32,0) 34%,rgba(14,18,32,0) 58%,rgba(14,18,32,.7) 100%)}
+#title{display:flex;flex-direction:column;align-items:center;padding:0 16px max(12px,calc(env(safe-area-inset-bottom) + var(--inapp-bot,0px)));background:linear-gradient(180deg,rgba(14,18,32,.62) 0%,rgba(14,18,32,0) 34%,rgba(14,18,32,0) 58%,rgba(14,18,32,.7) 100%)}
 .news{display:flex;width:calc(100% + 32px);margin:0 -16px;padding-top:max(10px,env(safe-area-inset-top));height:auto}
 .news-tag{flex:none;background:var(--alert);color:#fff;font-weight:700;font-size:16px;padding:7px 12px 6px;letter-spacing:.08em;display:flex;align-items:center}
 .news-bar{flex:1;min-width:0;overflow:hidden;background:rgba(245,242,234,.95);color:var(--ink);font-weight:700;font-size:15px;display:flex;align-items:center;white-space:nowrap}
@@ -111,22 +111,22 @@ button,a{font:inherit;color:inherit;background:none;border:0;cursor:pointer;touc
 .touch{position:absolute;inset:0;pointer-events:none}
 /* 左手: 触った所にスティックが出る（WIRE ESCAPE と同じ） */
 .stickzone{position:absolute;left:0;bottom:0;width:46%;height:62%;pointer-events:none}   /* 枠だけ。触れるのはスティックの円（左下に固定） */
-.stick{position:absolute;left:calc(max(16px,env(safe-area-inset-left)) + 62px);top:calc(100% - max(16px,env(safe-area-inset-bottom)) - 62px);width:124px;height:124px;margin:-62px 0 0 -62px;border-radius:50%;border:2px solid rgba(255,255,255,.45);background:rgba(20,24,36,.28);opacity:.65;pointer-events:auto;touch-action:none}
+.stick{position:absolute;left:calc(max(16px,env(safe-area-inset-left)) + 62px);top:calc(100% - max(16px,calc(env(safe-area-inset-bottom) + var(--inapp-bot,0px))) - 62px);width:124px;height:124px;margin:-62px 0 0 -62px;border-radius:50%;border:2px solid rgba(255,255,255,.45);background:rgba(20,24,36,.28);opacity:.65;pointer-events:auto;touch-action:none}
 .stick::before{content:'';position:absolute;inset:-24px;border-radius:50%}   /* 円の少し外まで反応 */
 .stick.held{opacity:1}
 .stick .knob{position:absolute;left:50%;top:50%;width:54px;height:54px;margin:-27px 0 0 -27px;border-radius:50%;background:rgba(246,241,228,.85)}
 .tbtn{position:absolute;pointer-events:auto;width:66px;height:66px;border-radius:50%;background:rgba(20,24,36,.5);border:2px solid rgba(255,255,255,.6);color:#fff;font-weight:700;font-size:14px;touch-action:none;display:flex;align-items:center;justify-content:center}
 /* 右手（WIRE ESCAPE と同じ並び）: ワイヤー（大・前の上へ自動で）、その左にジャンプ、ジャンプの上に投げる */
-.tbtn[data-k=wire]{right:max(16px,env(safe-area-inset-right));bottom:max(16px,env(safe-area-inset-bottom));width:104px;height:104px;background:rgba(217,119,42,.42);border-color:rgba(255,190,120,.95)}
+.tbtn[data-k=wire]{right:max(16px,env(safe-area-inset-right));bottom:max(16px,calc(env(safe-area-inset-bottom) + var(--inapp-bot,0px)));width:104px;height:104px;background:rgba(217,119,42,.42);border-color:rgba(255,190,120,.95)}
 .tbtn[data-k=wire] svg{width:52px;height:52px}
 .tbtn[data-k=wire].aim{box-shadow:0 0 0 3px rgba(255,255,255,.85),0 0 18px rgba(217,119,42,.9)}
-.tbtn[data-k=jump]{right:max(146px,calc(env(safe-area-inset-right) + 146px));bottom:max(20px,calc(env(safe-area-inset-bottom) + 4px));width:80px;height:96px;border-radius:16px}
+.tbtn[data-k=jump]{right:max(146px,calc(env(safe-area-inset-right) + 146px));bottom:max(20px,calc(calc(env(safe-area-inset-bottom) + var(--inapp-bot,0px)) + 4px));width:80px;height:96px;border-radius:16px}
 .tbtn.lit{background:#d9772a;border-color:#fff}
 .tbtn.off{opacity:.3}
 .tbtn:active{transform:scale(.94)}
 
 /* ---------- 結果 ---------- */
-#result{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:max(10px,env(safe-area-inset-top)) 16px max(10px,env(safe-area-inset-bottom));background:rgba(20,24,36,.7)}
+#result{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:max(10px,env(safe-area-inset-top)) 16px max(10px,calc(env(safe-area-inset-bottom) + var(--inapp-bot,0px)));background:rgba(20,24,36,.7)}
 .slip-wrap{flex:1;min-height:0;display:flex;align-items:center;justify-content:center;width:100%}
 #slip{max-width:100%;max-height:100%;width:auto;height:100%;aspect-ratio:1080/1350;object-fit:contain}
 .result-actions{display:flex;flex-wrap:wrap;gap:6px 18px;align-items:center;justify-content:center;color:#fff}
